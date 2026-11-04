@@ -131,8 +131,8 @@ export async function sendBookingNotificationEmail(
           Accept: "application/json",
           "User-Agent":
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
-          Origin: "https://donald-traum-fly-fishing.vercel.app",
-          Referer: "https://donald-traum-fly-fishing.vercel.app/",
+          Origin: "https://traumflycast.vercel.app",
+          Referer: "https://traumflycast.vercel.app/",
         },
         body: JSON.stringify({
           access_key: web3FormsKey,
@@ -188,8 +188,8 @@ export async function sendRegretNotificationEmail(
       headers: {
         "Content-Type": "application/json",
         Accept: "application/json",
-        Origin: "https://donald-traum-fly-fishing.vercel.app",
-        Referer: "https://donald-traum-fly-fishing.vercel.app/arrepentimiento",
+        Origin: "https://traumflycast.vercel.app",
+        Referer: "https://traumflycast.vercel.app/arrepentimiento",
       },
       body: JSON.stringify({
         _subject: `[TRAUM Botón de Arrepentimiento ${regret.regretCode}] Solicitud de ${regret.fullName}`,
