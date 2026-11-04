@@ -266,8 +266,8 @@ export default function FishingMapWidget({
 
       {/* Map + Active Spot Detail Card */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-stretch">
-        {/* Interactive Map Container (7 cols) — Fills 100% of vertical space with zero empty bar */}
-        <div className="lg:col-span-7 min-h-[450px] sm:min-h-[520px] lg:min-h-[580px] h-full border border-[#D8CEB9] shadow-lg relative overflow-hidden bg-[#263D32]">
+        {/* Interactive Map Container (7 cols) — Explicit mobile/tablet height + 100% full desktop height */}
+        <div className="lg:col-span-7 min-h-[360px] h-[360px] sm:h-[460px] lg:h-full lg:min-h-[560px] border border-[#D8CEB9] shadow-lg relative overflow-hidden bg-[#263D32]">
           <div
             ref={mapContainerRef}
             className="absolute inset-0 w-full h-full z-10"

@@ -118,9 +118,9 @@ export default function CalendarSection({
   return (
     <section
       id="calendario"
-      className="py-24 lg:py-36 bg-[#F2EFE6] text-[#292D29] relative"
+      className="py-20 sm:py-24 lg:py-36 bg-[#F2EFE6] text-[#292D29] relative"
     >
-      <div className="max-w-7xl mx-auto px-6 lg:px-10">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-10">
         {/* Header */}
         <div className="flex flex-col lg:flex-row lg:items-end justify-between mb-12 gap-6">
           <div>
@@ -144,7 +144,7 @@ export default function CalendarSection({
         </div>
 
         {/* Service Modalities Bar */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-10">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-8 sm:mb-10">
           {[
             {
               title: "Salida individual",
@@ -165,7 +165,7 @@ export default function CalendarSection({
           ].map((item) => (
             <div
               key={item.title}
-              className="p-4 bg-[#D8CEB9]/35 border border-[#D8CEB9] flex flex-col justify-between"
+              className="p-3.5 sm:p-4 bg-[#D8CEB9]/35 border border-[#D8CEB9] flex flex-col justify-between"
             >
               <span className="font-editorial text-lg sm:text-xl text-[#263D32] font-medium">
                 {item.title}
@@ -178,21 +178,21 @@ export default function CalendarSection({
         </div>
 
         {/* Interactive Calendar + Selected Date Details Card */}
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-10 items-start">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-10 items-start">
           {/* Left: Calendar Grid (7 columns) */}
-          <div className="lg:col-span-7 bg-[#F2EFE6] border border-[#D8CEB9] shadow-lg p-6 sm:p-8">
+          <div className="lg:col-span-7 bg-[#F2EFE6] border border-[#D8CEB9] shadow-lg p-3.5 sm:p-6 lg:p-8">
             {/* Month Navigator */}
-            <div className="flex items-center justify-between pb-6 mb-6 border-b border-[#D8CEB9]">
+            <div className="flex items-center justify-between pb-4 sm:pb-6 mb-4 sm:mb-6 border-b border-[#D8CEB9]">
               <div>
-                <span className="text-[11px] uppercase tracking-[0.22em] text-[#746657] block">
+                <span className="text-[10px] sm:text-[11px] uppercase tracking-[0.22em] text-[#746657] block">
                   Temporada de Pesca
                 </span>
-                <h3 className="font-editorial text-3xl sm:text-4xl text-[#263D32]">
+                <h3 className="font-editorial text-2xl sm:text-3xl lg:text-4xl text-[#263D32]">
                   {MONTH_NAMES[currentMonth]} {currentYear}
                 </h3>
               </div>
 
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1.5 sm:gap-2">
                 <button
                   type="button"
                   onClick={handlePrevMonth}
@@ -213,11 +213,11 @@ export default function CalendarSection({
             </div>
 
             {/* Weekday Headers */}
-            <div className="grid grid-cols-7 gap-1.5 sm:gap-2 mb-3 text-center">
+            <div className="grid grid-cols-7 gap-1 sm:gap-2 mb-2 sm:mb-3 text-center">
               {WEEKDAYS.map((day) => (
                 <div
                   key={day}
-                  className="text-[11px] uppercase tracking-[0.18em] text-[#746657] font-semibold py-1"
+                  className="text-[10px] sm:text-[11px] uppercase tracking-[0.14em] sm:tracking-[0.18em] text-[#746657] font-semibold py-1"
                 >
                   {day}
                 </div>
@@ -225,7 +225,7 @@ export default function CalendarSection({
             </div>
 
             {/* Days Grid */}
-            <div className="grid grid-cols-7 gap-1.5 sm:gap-2">
+            <div className="grid grid-cols-7 gap-1 sm:gap-2">
               {calendarDays.map((cell, index) => {
                 if (!cell.day || !cell.dateStr) {
                   return (
@@ -296,7 +296,7 @@ export default function CalendarSection({
           </div>
 
           {/* Right: Selected Date Information Sheet (5 columns) */}
-          <div className="lg:col-span-5 bg-[#263D32] text-[#F2EFE6] p-7 sm:p-9 border border-[#65745A]/40 shadow-xl">
+          <div className="lg:col-span-5 bg-[#263D32] text-[#F2EFE6] p-5 sm:p-7 lg:p-9 border border-[#65745A]/40 shadow-xl">
             <div className="flex items-center justify-between pb-5 mb-6 border-b border-[#899487]/30">
               <div>
                 <span className="text-[10px] uppercase tracking-[0.26em] text-[#D8CEB9] block mb-1">

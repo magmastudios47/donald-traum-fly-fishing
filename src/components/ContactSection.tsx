@@ -285,12 +285,12 @@ export default function ContactSection({
   return (
     <section
       id="contacto"
-      className="py-24 lg:py-36 bg-[#F2EFE6] text-[#292D29] relative border-t border-[#D8CEB9]"
+      className="py-20 sm:py-24 lg:py-36 bg-[#F2EFE6] text-[#292D29] relative border-t border-[#D8CEB9]"
     >
-      <div className="max-w-7xl mx-auto px-6 lg:px-10">
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 lg:gap-16 items-start">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-10">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-10 lg:gap-16 items-start">
           {/* Left Column: Editorial Invitation & Direct Channels (5 cols) */}
-          <div className="lg:col-span-5 space-y-8">
+          <div className="lg:col-span-5 space-y-6 sm:space-y-8">
             <div>
               <div className="flex items-center gap-3 mb-4">
                 <span className="w-8 h-[1px] bg-[#263D32]" />
@@ -298,11 +298,11 @@ export default function ContactSection({
                   Contacto y reservas
                 </span>
               </div>
-              <h2 className="font-editorial text-4xl sm:text-5xl lg:text-6xl text-[#263D32] leading-[1.12] mb-6">
+              <h2 className="font-editorial text-3xl sm:text-5xl lg:text-6xl text-[#263D32] leading-[1.12] mb-4 sm:mb-6">
                 Tu próxima historia{" "}
                 <span className="italic text-[#746657]">comienza acá.</span>
               </h2>
-              <p className="text-base sm:text-lg text-[#292D29]/85 font-light leading-relaxed">
+              <p className="text-sm sm:text-lg text-[#292D29]/85 font-light leading-relaxed">
                 Podés solicitar un <strong>día libre a medida</strong> (sin
                 seña previa hasta confirmar disponibilidad) o anotarte en una{" "}
                 <strong>salida ya programada del calendario</strong> (con seña
@@ -313,7 +313,7 @@ export default function ContactSection({
             </div>
 
             {/* Direct Contact Channels */}
-            <div className="space-y-4 pt-2">
+            <div className="space-y-3 sm:space-y-4 pt-2">
               <div className="p-5 bg-[#D8CEB9]/35 border border-[#D8CEB9] flex items-start gap-4">
                 <MapPin className="w-5 h-5 text-[#263D32] mt-0.5 flex-shrink-0" />
                 <div>
@@ -397,7 +397,7 @@ export default function ContactSection({
           </div>
 
           {/* Right Column: Structured Contracting & Booking Form (7 cols) */}
-          <div className="lg:col-span-7 bg-[#F2EFE6] border border-[#D8CEB9] shadow-xl p-7 sm:p-10">
+          <div className="lg:col-span-7 bg-[#F2EFE6] border border-[#D8CEB9] shadow-xl p-4 sm:p-7 lg:p-10">
             <div className="pb-6 mb-7 border-b border-[#D8CEB9] flex items-center justify-between">
               <div>
                 <span className="text-[10px] uppercase tracking-[0.24em] text-[#746657] block mb-1 font-semibold">

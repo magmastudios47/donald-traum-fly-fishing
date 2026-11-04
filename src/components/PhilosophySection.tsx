@@ -40,9 +40,9 @@ export default function PhilosophySection({
   return (
     <section
       id="filosofia"
-      className="py-24 lg:py-36 bg-[#F2EFE6] text-[#292D29] relative overflow-hidden"
+      className="py-20 sm:py-24 lg:py-36 bg-[#F2EFE6] text-[#292D29] relative overflow-hidden"
     >
-      <div className="max-w-7xl mx-auto px-6 lg:px-10">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-10">
         {/* Top Asymmetric Editorial Spread */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 lg:gap-16 items-start mb-24 lg:mb-32">
           {/* Left Editorial Copy + Sello de Origen below blockquote (7 columns) */}

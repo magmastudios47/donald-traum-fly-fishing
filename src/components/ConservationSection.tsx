@@ -41,8 +41,8 @@ export default function ConservationSection({
   return (
     <>
       {/* H. PESCA RESPONSABLE — COMPROMISO CON LA NATURALEZA */}
-      <section className="py-24 lg:py-36 bg-[#292D29] text-[#F2EFE6] relative overflow-hidden">
-        <div className="max-w-7xl mx-auto px-6 lg:px-10">
+      <section className="py-20 sm:py-24 lg:py-36 bg-[#292D29] text-[#F2EFE6] relative overflow-hidden">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-10">
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 lg:gap-16 items-center">
             {/* Left Image Column (5 cols) */}
             <div className="lg:col-span-5">

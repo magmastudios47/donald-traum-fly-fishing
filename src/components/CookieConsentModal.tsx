@@ -124,8 +124,8 @@ export default function CookieConsentModal() {
   if (!visible) return null;
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-xs flex items-end sm:items-center justify-center p-4 sm:p-6">
-      <div className="max-w-xl w-full bg-[#263D32] text-[#F2EFE6] border border-[#D8CEB9]/40 shadow-2xl p-6 sm:p-8 space-y-6">
+    <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-xs flex items-end sm:items-center justify-center p-3 sm:p-6 overflow-y-auto">
+      <div className="max-w-xl w-full bg-[#263D32] text-[#F2EFE6] border border-[#D8CEB9]/40 shadow-2xl p-5 sm:p-8 space-y-5 sm:space-y-6 max-h-[92vh] overflow-y-auto overscroll-contain my-auto">
         <div className="flex items-start justify-between gap-4 border-b border-[#899487]/30 pb-4">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 bg-[#292D29] border border-[#D8CEB9]/30 flex items-center justify-center">

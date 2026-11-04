@@ -44,7 +44,7 @@ export default function Navbar({ onOpenBookingModal }: NavbarProps) {
             : "bg-gradient-to-b from-black/65 via-black/25 to-transparent py-6"
         }`}
       >
-        <div className="max-w-7xl mx-auto px-6 lg:px-10 flex items-center justify-between">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-10 flex items-center justify-between">
           {/* Left spacer on desktop so title feels balanced, or left-aligned clean */}
           <a
             href="#inicio"

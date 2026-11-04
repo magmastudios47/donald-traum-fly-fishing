@@ -324,15 +324,15 @@ export default function BookingModal({
 
   return (
     <div
-      className="fixed inset-0 z-50 bg-black/75 backdrop-blur-xs flex items-center justify-center p-4 sm:p-6 overflow-y-auto"
+      className="fixed inset-0 z-50 bg-black/75 backdrop-blur-xs flex items-center justify-center p-3 sm:p-6 overflow-y-auto"
       onClick={onClose}
     >
       <div
-        className="bg-[#F2EFE6] text-[#292D29] max-w-2xl w-full border border-[#D8CEB9] shadow-2xl overflow-hidden my-8"
+        className="bg-[#F2EFE6] text-[#292D29] max-w-2xl w-full border border-[#D8CEB9] shadow-2xl overflow-hidden my-auto max-h-[92vh] flex flex-col"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Top Banner */}
-        <div className="bg-[#263D32] text-[#F2EFE6] px-6 sm:px-8 py-6 flex items-center justify-between border-b border-[#899487]/30">
+        <div className="bg-[#263D32] text-[#F2EFE6] px-5 sm:px-8 py-5 sm:py-6 flex items-center justify-between border-b border-[#899487]/30 flex-shrink-0">
           <div>
             <span className="text-[10px] uppercase tracking-[0.26em] text-[#D8CEB9] block mb-1">
               {createdInquiry
@@ -364,7 +364,7 @@ export default function BookingModal({
           </button>
         </div>
 
-        <div className="p-6 sm:p-8">
+        <div className="p-5 sm:p-8 overflow-y-auto flex-1 overscroll-contain">
           {createdInquiry ? (
             isScheduledDeparture ? (
               /* CASO A: SALIDA PRECARGADA -> MUESTRA PASO 2 CON DATOS DE PAGO DE SEÑA (SIN CBU) */

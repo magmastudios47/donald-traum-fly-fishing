@@ -143,17 +143,17 @@ export default function GoogleAuthModal({
 
   return (
     <div
-      className="fixed inset-0 z-[60] bg-black/75 backdrop-blur-xs flex items-center justify-center p-4"
+      className="fixed inset-0 z-[60] bg-black/75 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-y-auto"
       onClick={onClose}
     >
       <div
-        className="bg-white text-[#292D29] max-w-md w-full border border-[#D8CEB9] shadow-2xl overflow-hidden"
+        className="bg-white text-[#292D29] max-w-md w-full border border-[#D8CEB9] shadow-2xl overflow-hidden my-auto max-h-[92vh] flex flex-col"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="px-6 py-5 border-b border-gray-200 flex items-center justify-between bg-[#F2EFE6]/60">
+        <div className="px-5 sm:px-6 py-4 sm:py-5 border-b border-gray-200 flex items-center justify-between bg-[#F2EFE6]/60 flex-shrink-0">
           <div className="flex items-center gap-3">
-            <GoogleLogoSvg className="w-6 h-6" />
+            <GoogleLogoSvg className="w-6 h-6 flex-shrink-0" />
             <div>
               <span className="text-[10px] uppercase tracking-[0.22em] text-[#65745A] font-semibold block">
                 Autenticación verificada
@@ -173,7 +173,7 @@ export default function GoogleAuthModal({
           </button>
         </div>
 
-        <div className="p-6 sm:p-7 space-y-5">
+        <div className="p-5 sm:p-7 space-y-5 overflow-y-auto flex-1 overscroll-contain">
           <p className="text-xs sm:text-sm text-[#292D29]/80 font-light leading-relaxed">
             {contextLabel}. Tu identidad quedará asociada a tu perfil de Google
             para garantizar reseñas auténticas y notificaciones seguras.

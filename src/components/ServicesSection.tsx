@@ -54,9 +54,9 @@ export default function ServicesSection({
   return (
     <section
       id="servicios"
-      className="py-24 lg:py-36 bg-[#D8CEB9]/35 text-[#292D29] border-y border-[#D8CEB9]"
+      className="py-20 sm:py-24 lg:py-36 bg-[#D8CEB9]/35 text-[#292D29] border-y border-[#D8CEB9]"
     >
-      <div className="max-w-7xl mx-auto px-6 lg:px-10">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-10">
         {/* Header */}
         <div className="max-w-3xl mb-16 lg:mb-20">
           <div className="flex items-center gap-3 mb-4">

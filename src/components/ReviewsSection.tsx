@@ -111,9 +111,9 @@ export default function ReviewsSection({
   return (
     <section
       id="resenas"
-      className="py-24 lg:py-36 bg-[#F2EFE6] text-[#292D29] border-t border-[#D8CEB9]"
+      className="py-20 sm:py-24 lg:py-36 bg-[#F2EFE6] text-[#292D29] border-t border-[#D8CEB9]"
     >
-      <div className="max-w-7xl mx-auto px-6 lg:px-10">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-10">
         {/* Section Header */}
         <div className="flex flex-col lg:flex-row lg:items-end justify-between mb-14 lg:mb-20 gap-6">
           <div>

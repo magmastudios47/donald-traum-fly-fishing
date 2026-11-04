@@ -20,9 +20,9 @@ export default function ExperiencesSection({
   return (
     <section
       id="experiencias"
-      className="py-24 lg:py-36 bg-[#263D32] text-[#F2EFE6] relative"
+      className="py-20 sm:py-24 lg:py-36 bg-[#263D32] text-[#F2EFE6] relative"
     >
-      <div className="max-w-7xl mx-auto px-6 lg:px-10">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-10">
         {/* Header */}
         <div className="flex flex-col lg:flex-row lg:items-end justify-between mb-16 lg:mb-20 gap-6">
           <div>
@@ -104,14 +104,14 @@ export default function ExperiencesSection({
       {/* Detailed Experience Modal */}
       {activeExperience && (
         <div
-          className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4 sm:p-6 overflow-y-auto"
+          className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-3 sm:p-6 overflow-y-auto"
           onClick={() => setActiveExperience(null)}
         >
           <div
-            className="bg-[#F2EFE6] text-[#292D29] max-w-2xl w-full border border-[#D8CEB9] shadow-2xl overflow-hidden my-8"
+            className="bg-[#F2EFE6] text-[#292D29] max-w-2xl w-full border border-[#D8CEB9] shadow-2xl overflow-hidden my-auto max-h-[92vh] flex flex-col"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="relative h-64 sm:h-72 overflow-hidden">
+            <div className="relative h-48 sm:h-64 overflow-hidden flex-shrink-0">
               <img
                 src={activeExperience.imageUrl}
                 alt={activeExperience.title}
@@ -121,22 +121,22 @@ export default function ExperiencesSection({
               <button
                 type="button"
                 onClick={() => setActiveExperience(null)}
-                className="absolute top-4 right-4 w-10 h-10 bg-[#292D29]/80 text-[#F2EFE6] hover:bg-[#263D32] flex items-center justify-center transition-colors cursor-pointer"
+                className="absolute top-3 sm:top-4 right-3 sm:right-4 w-9 sm:w-10 h-9 sm:h-10 bg-[#292D29]/80 text-[#F2EFE6] hover:bg-[#263D32] flex items-center justify-center transition-colors cursor-pointer"
                 aria-label="Cerrar detalle"
               >
                 <X className="w-5 h-5" />
               </button>
-              <div className="absolute bottom-6 left-6 right-6 text-[#F2EFE6]">
-                <span className="text-[11px] uppercase tracking-[0.26em] text-[#D8CEB9] block mb-1">
+              <div className="absolute bottom-4 sm:bottom-6 left-5 sm:left-6 right-5 sm:right-6 text-[#F2EFE6]">
+                <span className="text-[10px] sm:text-[11px] uppercase tracking-[0.26em] text-[#D8CEB9] block mb-1">
                   Experiencia {activeExperience.number} · {activeExperience.subtitle}
                 </span>
-                <h3 className="font-editorial text-3xl sm:text-4xl">
+                <h3 className="font-editorial text-2xl sm:text-4xl">
                   {activeExperience.title}
                 </h3>
               </div>
             </div>
 
-            <div className="p-6 sm:p-8 space-y-6">
+            <div className="p-5 sm:p-8 space-y-5 sm:space-y-6 overflow-y-auto flex-1 overscroll-contain">
               <p className="text-base text-[#292D29]/90 leading-relaxed font-light">
                 {activeExperience.description} {activeExperience.extendedDescription}
               </p>

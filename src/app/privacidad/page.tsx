@@ -9,7 +9,7 @@ export const metadata = {
 export default function PrivacidadPage() {
   return (
     <div className="min-h-screen bg-[#F2EFE6] text-[#292D29] flex flex-col">
-      <header className="bg-[#263D32] text-[#F2EFE6] py-6 px-6 lg:px-10 border-b border-[#899487]/30">
+      <header className="bg-[#263D32] text-[#F2EFE6] py-4 sm:py-6 px-4 sm:px-6 lg:px-10 border-b border-[#899487]/30">
         <div className="max-w-4xl mx-auto flex items-center justify-between">
           <div>
             <span className="font-editorial text-2xl sm:text-3xl tracking-[0.26em] block">
@@ -21,15 +21,16 @@ export default function PrivacidadPage() {
           </div>
           <Link
             href="/"
-            className="px-4 py-2 border border-[#D8CEB9]/40 text-xs uppercase tracking-[0.18em] text-[#F2EFE6] hover:bg-[#D8CEB9] hover:text-[#263D32] transition-colors inline-flex items-center gap-2"
+            className="px-3.5 sm:px-4 py-2 border border-[#D8CEB9]/40 text-[10px] sm:text-xs uppercase tracking-[0.18em] text-[#F2EFE6] hover:bg-[#D8CEB9] hover:text-[#263D32] transition-colors inline-flex items-center gap-1.5 sm:gap-2"
           >
-            <ArrowLeft className="w-4 h-4" />
-            <span>Volver al inicio</span>
+            <ArrowLeft className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+            <span className="hidden sm:inline">Volver al inicio</span>
+            <span className="sm:hidden">Inicio</span>
           </Link>
         </div>
       </header>
 
-      <main className="max-w-4xl mx-auto px-6 lg:px-10 py-16 lg:py-24 space-y-8 flex-1">
+      <main className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-10 py-10 sm:py-16 lg:py-24 space-y-8 flex-1">
         <div className="border-b border-[#D8CEB9] pb-6">
           <div className="inline-flex items-center gap-2 text-xs uppercase tracking-[0.24em] text-[#65745A] font-semibold mb-2">
             <ShieldCheck className="w-4 h-4" />

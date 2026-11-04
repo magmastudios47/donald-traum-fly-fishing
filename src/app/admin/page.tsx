@@ -433,7 +433,7 @@ export default function AdminDashboardPage() {
   return (
     <div className="min-h-screen bg-[#F2EFE6] text-[#292D29] flex flex-col">
       {/* Top Bar */}
-      <header className="bg-[#263D32] text-[#F2EFE6] border-b border-[#899487]/30 py-4 px-6 lg:px-10 sticky top-0 z-30">
+      <header className="bg-[#263D32] text-[#F2EFE6] border-b border-[#899487]/30 py-4 px-4 sm:px-6 lg:px-10 sticky top-0 z-30">
         <div className="max-w-7xl mx-auto flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div className="flex items-center gap-4">
             <span className="font-editorial text-2xl sm:text-3xl tracking-[0.22em]">
@@ -462,7 +462,7 @@ export default function AdminDashboardPage() {
         </div>
       </header>
 
-      <div className="max-w-7xl mx-auto w-full px-6 lg:px-10 py-10 flex-1">
+      <div className="max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-10 py-6 sm:py-10 flex-1">
         {/* Navigation Tabs */}
         <div className="flex flex-wrap gap-2 pb-8 mb-8 border-b border-[#D8CEB9]">
           <button

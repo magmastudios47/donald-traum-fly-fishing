@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Cormorant_Garamond, Manrope } from "next/font/google";
 import "./globals.css";
 
@@ -15,6 +15,13 @@ const manrope = Manrope({
   weight: ["300", "400", "500", "600", "700"],
 });
 
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 5,
+  themeColor: "#263D32",
+};
+
 export const metadata: Metadata = {
   title: "TRAUM | Fly Fishing Patagonia — Donde la pesca se hace realidad",
   description:
@@ -29,6 +36,15 @@ export const metadata: Metadata = {
     "río malleo",
     "río chimehuín",
   ],
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "default",
+    title: "TRAUM",
+  },
+  formatDetection: {
+    telephone: true,
+    email: true,
+  },
 };
 
 export default function RootLayout({

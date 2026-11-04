@@ -46,7 +46,7 @@ export default function Footer({ settings }: FooterProps) {
 
   return (
     <footer className="bg-[#292D29] text-[#F2EFE6] border-t border-[#899487]/20">
-      <div className="max-w-7xl mx-auto px-6 lg:px-10 py-16 lg:py-24">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-10 py-16 lg:py-24">
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-12 gap-12 pb-16 border-b border-[#899487]/20">
           {/* Brand Identity + Clean Cutout Emblem Seal (4 cols) */}
           <div className="lg:col-span-4 space-y-6">

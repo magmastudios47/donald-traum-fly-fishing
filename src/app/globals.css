@@ -22,11 +22,39 @@
   --font-sans: var(--font-sans), system-ui, -apple-system, sans-serif;
 }
 
+html {
+  overflow-x: hidden;
+  max-width: 100vw;
+  -webkit-text-size-adjust: 100%;
+}
+
 body {
   background-color: var(--ivory);
   color: var(--charcoal);
   font-family: var(--font-sans);
   overflow-x: hidden;
+  max-width: 100vw;
+  min-height: 100vh;
+  min-height: 100dvh;
+}
+
+/* Prevent unwanted zoom on inputs in iOS Safari */
+@media screen and (max-width: 768px) {
+  input[type="text"],
+  input[type="email"],
+  input[type="tel"],
+  input[type="password"],
+  input[type="date"],
+  input[type="number"],
+  select,
+  textarea {
+    font-size: 16px !important;
+  }
+}
+
+/* Touch improvements for mobile and tablets */
+button, a, input, select, textarea {
+  touch-action: manipulation;
 }
 
 h1, h2, h3, h4, .font-editorial {
