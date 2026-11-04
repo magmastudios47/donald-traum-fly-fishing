@@ -16,10 +16,23 @@ export async function sendBookingNotificationEmail(
   const smtpPass =
     settings.smtpAppPassword || process.env.SMTP_APP_PASSWORD || "";
   const resendKey = settings.resendApiKey || process.env.RESEND_API_KEY || "";
+  const web3FormsKey =
+    settings.web3FormsAccessKey ||
+    process.env.WEB3FORMS_ACCESS_KEY ||
+    "fa183ece-13f6-4360-8085-ff84ba3ea870";
 
-  const subject = `[TRAUM Reserva ${inquiry.bookingCode}] Nuevo pedido de ${inquiry.fullName} — ${
+  const isScheduledWithDeposit = Boolean(inquiry.requiresDeposit && inquiry.departureId);
+  const subjectPrefix = isScheduledWithDeposit
+    ? `[TRAUM Salida Programada ${inquiry.bookingCode}]`
+    : `[TRAUM Solicitud de Fecha ${inquiry.bookingCode}]`;
+
+  const subject = `${subjectPrefix} ${inquiry.fullName} — ${
     inquiry.selectedServiceTitle || inquiry.experienceType
-  }`;
+  } (${inquiry.desiredDate})`;
+
+  const depositInfoHtml = isScheduledWithDeposit
+    ? `${paymentConfig.depositPercentage}% (Salida precargada · Alias informado: ${paymentConfig.bankAlias})`
+    : `Sin seña previa (Solicitud de fecha libre sujeta a confirmación de disponibilidad)`;
 
   const htmlBody = `
     <div style="font-family: Georgia, serif; max-width: 640px; margin: 0 auto; border: 1px solid #D8CEB9; background: #F2EFE6; color: #292D29;">
@@ -38,7 +51,7 @@ export async function sendBookingNotificationEmail(
           <tr><td style="padding: 10px 14px; border-bottom: 1px solid #eee; font-weight: bold;">Fecha Solicitada:</td><td style="padding: 10px 14px; border-bottom: 1px solid #eee;">${inquiry.desiredDate}</td></tr>
           <tr><td style="padding: 10px 14px; border-bottom: 1px solid #eee; font-weight: bold;">Modalidad y Grupo:</td><td style="padding: 10px 14px; border-bottom: 1px solid #eee;">${inquiry.experienceType} · ${inquiry.serviceGroupType} (${inquiry.participantsCount} pers.)</td></tr>
           <tr><td style="padding: 10px 14px; border-bottom: 1px solid #eee; font-weight: bold;">Nivel de Pesca:</td><td style="padding: 10px 14px; border-bottom: 1px solid #eee;">${inquiry.skillLevel}</td></tr>
-          <tr><td style="padding: 10px 14px; border-bottom: 1px solid #eee; font-weight: bold;">Seña Informada al Cliente:</td><td style="padding: 10px 14px; border-bottom: 1px solid #eee;">${paymentConfig.depositPercentage}% (Alias: ${paymentConfig.bankAlias} · Titular: ${paymentConfig.bankHolder})</td></tr>
+          <tr><td style="padding: 10px 14px; border-bottom: 1px solid #eee; font-weight: bold;">Régimen de Seña:</td><td style="padding: 10px 14px; border-bottom: 1px solid #eee;">${depositInfoHtml}</td></tr>
           <tr><td style="padding: 10px 14px; border-bottom: 1px solid #eee; font-weight: bold;">Aceptación Legal:</td><td style="padding: 10px 14px; border-bottom: 1px solid #eee;">Aceptado (${inquiry.legalVersion}) el ${inquiry.legalAcceptedAt}</td></tr>
           <tr><td style="padding: 10px 14px; font-weight: bold;">Comentarios:</td><td style="padding: 10px 14px;">${inquiry.comments || "Sin comentarios adicionales"}</td></tr>
         </table>
@@ -108,41 +121,53 @@ export async function sendBookingNotificationEmail(
     }
   }
 
-  // 3. Automatic FormSubmit AJAX relay to traumflyfishing9@gmail.com
-  try {
-    const res = await fetch(`https://formsubmit.co/ajax/${encodeURIComponent(targetEmail)}`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Accept: "application/json",
-        Origin: "https://donald-traum-fly-fishing.vercel.app",
-        Referer: "https://donald-traum-fly-fishing.vercel.app/",
-      },
-      body: JSON.stringify({
-        _subject: subject,
-        _template: "table",
-        _captcha: "false",
-        Codigo_Reserva: inquiry.bookingCode,
-        Servicio_Contratado: inquiry.selectedServiceTitle || inquiry.experienceType,
-        Cliente: inquiry.fullName,
-        Email_Cliente: inquiry.email,
-        Cuenta_Google: inquiry.googleEmail || "No vinculada",
-        WhatsApp: inquiry.whatsapp,
-        Fecha_Solicitada: inquiry.desiredDate,
-        Experiencia: inquiry.experienceType,
-        Modalidad_Grupo: inquiry.serviceGroupType,
-        Participantes: inquiry.participantsCount,
-        Nivel_Pesca: inquiry.skillLevel,
-        Porcentaje_Sena: `${paymentConfig.depositPercentage}%`,
-        Aceptacion_Legal: `SI (${inquiry.legalVersion} - ${inquiry.legalAcceptedAt})`,
-        Comentarios: inquiry.comments || "-",
-      }),
-    });
-    if (res.ok) {
-      return { sent: true, channel: "formsubmit" };
+  // 3. Try Web3Forms API if key is configured
+  if (web3FormsKey) {
+    try {
+      const res = await fetch("https://api.web3forms.com/submit", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+          "User-Agent":
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+          Origin: "https://donald-traum-fly-fishing.vercel.app",
+          Referer: "https://donald-traum-fly-fishing.vercel.app/",
+        },
+        body: JSON.stringify({
+          access_key: web3FormsKey,
+          subject,
+          from_name: "TRAUM Fly Cast Patagonia",
+          email: inquiry.email,
+          replyto: inquiry.email,
+          Codigo_Reserva: inquiry.bookingCode,
+          Tipo_Solicitud: isScheduledWithDeposit
+            ? "Contratación de Salida Programada (Con Seña)"
+            : "Solicitud de Día Libre / Fecha a Medida (Sin Seña)",
+          Servicio_o_Salida:
+            inquiry.selectedServiceTitle || inquiry.experienceType,
+          Cliente: inquiry.fullName,
+          Email_Cliente: inquiry.email,
+          Cuenta_Google: inquiry.googleEmail || "No vinculada",
+          WhatsApp: inquiry.whatsapp,
+          Fecha_Solicitada: inquiry.desiredDate,
+          Experiencia: inquiry.experienceType,
+          Modalidad_Grupo: inquiry.serviceGroupType,
+          Participantes_Cupos: inquiry.participantsCount,
+          Nivel_Pesca: inquiry.skillLevel,
+          Condicion_Sena: isScheduledWithDeposit
+            ? `Seña del ${paymentConfig.depositPercentage}% habilitada al cliente`
+            : "Sin seña (sujeto a confirmar disponibilidad de fecha)",
+          Aceptacion_Legal: `SI (${inquiry.legalVersion} - ${inquiry.legalAcceptedAt})`,
+          Comentarios: inquiry.comments || "Sin comentarios adicionales",
+        }),
+      });
+      if (res.ok) {
+        return { sent: true, channel: "web3forms" };
+      }
+    } catch (err) {
+      console.warn("Web3Forms server relay warning:", err);
     }
-  } catch (err) {
-    console.warn("FormSubmit relay warning:", err);
   }
 
   return { sent: false, channel: "stored_in_db" };

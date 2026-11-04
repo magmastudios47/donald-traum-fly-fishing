@@ -76,10 +76,57 @@ export async function POST(request: NextRequest) {
         return NextResponse.json(
           {
             error:
-              "Debés aceptar los Términos y Condiciones, Política de Seña y Deslinde de Responsabilidad para contratar un servicio.",
+              "Debés aceptar los Términos y Condiciones y el Deslinde de Responsabilidad para continuar.",
           },
           { status: 400 }
         );
+      }
+
+      const requestedSpots = Math.max(1, Number(payload.participantsCount) || 1);
+      const departureId = payload.departureId
+        ? String(payload.departureId).trim()
+        : undefined;
+
+      let updatedDepartures = [...(current.departures || [])];
+      let isScheduledDeparture = false;
+
+      if (departureId) {
+        const depIndex = updatedDepartures.findIndex(
+          (d) => d.id === departureId
+        );
+        if (depIndex === -1) {
+          return NextResponse.json(
+            {
+              error:
+                "La salida programada seleccionada ya no se encuentra disponible.",
+            },
+            { status: 404 }
+          );
+        }
+
+        const targetDep = updatedDepartures[depIndex];
+        const currentAvailable =
+          targetDep.availableSpots !== null
+            ? targetDep.availableSpots
+            : targetDep.maxParticipants;
+
+        if (currentAvailable < requestedSpots) {
+          return NextResponse.json(
+            {
+              error:
+                currentAvailable <= 0
+                  ? "Esta salida programada ya no tiene cupos libres."
+                  : `Solo quedan ${currentAvailable} cupo(s) disponible(s) en esta salida y solicitaste ${requestedSpots}.`,
+            },
+            { status: 400 }
+          );
+        }
+
+        updatedDepartures[depIndex] = {
+          ...targetDep,
+          availableSpots: Math.max(0, currentAvailable - requestedSpots),
+        };
+        isScheduledDeparture = true;
       }
 
       const randomSuffix = Math.floor(1000 + Math.random() * 9000);
@@ -95,16 +142,24 @@ export async function POST(request: NextRequest) {
         googleEmail: payload.googleEmail ? String(payload.googleEmail) : undefined,
         whatsapp: (payload.whatsapp || "").trim(),
         desiredDate: payload.desiredDate || "A definir",
+        departureId: isScheduledDeparture ? departureId : undefined,
+        requiresDeposit: isScheduledDeparture,
+        spotsReleased: false,
         selectedServiceTitle:
           payload.selectedServiceTitle ||
           payload.experienceType ||
           "Pesca de vadeo",
         priceReference: payload.priceReference || "",
-        depositPercentage: current.paymentConfig.depositPercentage,
+        depositPercentage: isScheduledDeparture
+          ? current.paymentConfig.depositPercentage
+          : 0,
         experienceType: payload.experienceType || "Pesca de vadeo",
         serviceGroupType:
-          payload.serviceGroupType || "Salida para dos personas",
-        participantsCount: Number(payload.participantsCount) || 1,
+          payload.serviceGroupType ||
+          (requestedSpots === 1
+            ? "Salida individual"
+            : "Salida para dos personas"),
+        participantsCount: requestedSpots,
         skillLevel: payload.skillLevel || "Intermedio",
         comments: payload.comments || "",
         legalAccepted: true,
@@ -122,6 +177,7 @@ export async function POST(request: NextRequest) {
 
       const updated: TraumStoreData = {
         ...current,
+        departures: updatedDepartures,
         inquiries: [newInquiry, ...(current.inquiries || [])],
       };
 
@@ -130,6 +186,62 @@ export async function POST(request: NextRequest) {
         ok: true,
         inquiry: newInquiry,
         emailChannel: emailResult.channel,
+        store: saved,
+      });
+    }
+
+    // 1B. DAR DE BAJA / CANCELAR RESERVA Y LIBERAR CUPOS AUTOMÁTICAMENTE
+    if (payload.type === "CANCEL_INQUIRY") {
+      const inquiryId = String(payload.inquiryId || "").trim();
+      const deleteRecord = Boolean(payload.deleteRecord);
+
+      const targetInq = (current.inquiries || []).find(
+        (item) => item.id === inquiryId
+      );
+      if (!targetInq) {
+        return NextResponse.json(
+          { error: "No se encontró el pedido indicado." },
+          { status: 404 }
+        );
+      }
+
+      let updatedDepartures = [...(current.departures || [])];
+      if (targetInq.departureId && !targetInq.spotsReleased) {
+        updatedDepartures = updatedDepartures.map((dep) => {
+          if (dep.id !== targetInq.departureId) return dep;
+          const currentAvailable =
+            dep.availableSpots !== null ? dep.availableSpots : 0;
+          const restoredSpots = Math.min(
+            dep.maxParticipants,
+            currentAvailable + (Number(targetInq.participantsCount) || 1)
+          );
+          return {
+            ...dep,
+            availableSpots: restoredSpots,
+          };
+        });
+      }
+
+      const updatedInquiries = deleteRecord
+        ? (current.inquiries || []).filter((item) => item.id !== inquiryId)
+        : (current.inquiries || []).map((item) =>
+            item.id === inquiryId
+              ? {
+                  ...item,
+                  status: "Cancelado" as const,
+                  spotsReleased: true,
+                }
+              : item
+          );
+
+      const saved = await saveTraumStore({
+        ...current,
+        departures: updatedDepartures,
+        inquiries: updatedInquiries,
+      });
+
+      return NextResponse.json({
+        ok: true,
         store: saved,
       });
     }

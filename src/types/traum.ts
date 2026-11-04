@@ -112,6 +112,9 @@ export interface BookingInquiry {
   googleEmail?: string;
   whatsapp: string;
   desiredDate: string;
+  departureId?: string;
+  requiresDeposit?: boolean;
+  spotsReleased?: boolean;
   selectedServiceTitle?: string;
   priceReference?: string;
   depositPercentage?: number;
@@ -182,6 +185,7 @@ export interface SiteSettings {
   guideLicenseNumber: string;
   // Integraciones opcionales Google OAuth & SMTP/API de correo
   googleClientId?: string;
+  web3FormsAccessKey?: string;
   smtpUser?: string;
   smtpAppPassword?: string;
   resendApiKey?: string;

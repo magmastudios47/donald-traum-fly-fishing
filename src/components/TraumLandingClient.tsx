@@ -13,7 +13,7 @@ import ReviewsSection from "@/components/ReviewsSection";
 import ConservationSection from "@/components/ConservationSection";
 import ContactSection from "@/components/ContactSection";
 import Footer from "@/components/Footer";
-import BookingModal from "@/components/BookingModal";
+import BookingModal, { BookingPrefillData } from "@/components/BookingModal";
 import RevealSection from "@/components/RevealSection";
 import CookieConsentModal from "@/components/CookieConsentModal";
 
@@ -26,15 +26,8 @@ export default function TraumLandingClient({
 }: TraumLandingClientProps) {
   const [store, setStore] = useState<TraumStoreData>(initialData);
   const [bookingModalOpen, setBookingModalOpen] = useState(false);
-  const [bookingPrefill, setBookingPrefill] = useState<{
-    date?: string;
-    experienceType?: string;
-    serviceGroupType?: string;
-    destination?: string;
-    selectedServiceTitle?: string;
-    priceReference?: string;
-    paymentLink?: string;
-  } | null>(null);
+  const [bookingPrefill, setBookingPrefill] =
+    useState<BookingPrefillData | null>(null);
 
   const syncLiveStore = useCallback(async () => {
     try {
@@ -86,15 +79,7 @@ export default function TraumLandingClient({
     };
   }, [syncLiveStore]);
 
-  const handleOpenBookingModal = (prefill?: {
-    date?: string;
-    experienceType?: string;
-    serviceGroupType?: string;
-    destination?: string;
-    selectedServiceTitle?: string;
-    priceReference?: string;
-    paymentLink?: string;
-  }) => {
+  const handleOpenBookingModal = (prefill?: BookingPrefillData) => {
     setBookingPrefill(prefill || null);
     setBookingModalOpen(true);
   };
@@ -207,6 +192,7 @@ export default function TraumLandingClient({
             paymentConfig={store.paymentConfig}
             experiences={store.experiences}
             services={store.services}
+            departures={store.departures}
             prefillData={bookingPrefill}
             onInquirySubmitted={notifyLiveChange}
           />

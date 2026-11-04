@@ -212,6 +212,45 @@ export default function AdminDashboardPage() {
     }
   };
 
+  const handleCancelOrReleaseInquiry = async (
+    inquiryId: string,
+    deleteRecord = false
+  ) => {
+    setSaving(true);
+    try {
+      const res = await fetch("/api/traum", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          type: "CANCEL_INQUIRY",
+          inquiryId,
+          deleteRecord,
+        }),
+      });
+      const data = await res.json();
+      if (res.ok && data.store) {
+        setStore(data.store);
+        if (typeof BroadcastChannel !== "undefined") {
+          try {
+            const bc = new BroadcastChannel("traum_live_sync");
+            bc.postMessage({ updatedAt: Date.now() });
+            bc.close();
+          } catch {
+            // Ignore
+          }
+        }
+        setSaveMessage(
+          deleteRecord
+            ? "Pedido eliminado y cupos liberados en el calendario"
+            : "Reserva dada de baja y cupos liberados en vivo"
+        );
+        setTimeout(() => setSaveMessage(null), 3500);
+      }
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const handleUnlock = (e: React.FormEvent) => {
     e.preventDefault();
     const expectedPin = store?.settings.adminPin || "traum2026";
@@ -686,45 +725,150 @@ export default function AdminDashboardPage() {
               <h3 className="font-editorial text-2xl text-[#263D32] mb-2">
                 Salidas cargadas ({store.departures.length})
               </h3>
-              {store.departures.map((dep) => (
-                <div
-                  key={dep.id}
-                  className="bg-white border border-[#D8CEB9] p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4"
-                >
-                  <div className="space-y-1">
-                    <div className="flex items-center gap-2">
-                      <span className="px-2.5 py-0.5 bg-[#263D32] text-[#F2EFE6] text-xs font-medium">
-                        {dep.date}
-                      </span>
-                      <span className="text-xs uppercase tracking-wider text-[#65745A] font-semibold">
-                        {dep.experienceType}
-                      </span>
+              {store.departures.map((dep) => {
+                const enrolledInquiries = (store.inquiries || []).filter(
+                  (inq) =>
+                    inq.departureId === dep.id && inq.status !== "Cancelado"
+                );
+                return (
+                  <div
+                    key={dep.id}
+                    className="bg-white border border-[#D8CEB9] p-5 space-y-4"
+                  >
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                      <div className="space-y-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="px-2.5 py-0.5 bg-[#263D32] text-[#F2EFE6] text-xs font-medium">
+                            {dep.date}
+                          </span>
+                          <span className="text-xs uppercase tracking-wider text-[#65745A] font-semibold">
+                            {dep.experienceType}
+                          </span>
+                          <span
+                            className={`px-2 py-0.5 text-[11px] font-semibold ${
+                              dep.availableSpots === 0
+                                ? "bg-red-100 text-red-800"
+                                : "bg-[#D8CEB9]/60 text-[#263D32]"
+                            }`}
+                          >
+                            Cupos libres: {dep.availableSpots ?? dep.maxParticipants} de{" "}
+                            {dep.maxParticipants}
+                          </span>
+                        </div>
+                        <h4 className="font-editorial text-2xl text-[#263D32]">
+                          {dep.destination}
+                        </h4>
+                        <p className="text-xs text-[#746657]">
+                          {dep.serviceGroupType} · {dep.duration}
+                        </p>
+                        {dep.additionalInfo && (
+                          <p className="text-xs text-[#292D29]/75 pt-1">
+                            {dep.additionalInfo}
+                          </p>
+                        )}
+                      </div>
+
+                      <div className="flex items-center gap-2 self-start sm:self-center">
+                        <div className="flex items-center border border-[#D8CEB9] bg-[#F2EFE6]">
+                          <button
+                            type="button"
+                            title="Restar 1 cupo libre"
+                            onClick={() => {
+                              const currentSpots =
+                                dep.availableSpots ?? dep.maxParticipants;
+                              const nextSpots = Math.max(0, currentSpots - 1);
+                              persistStore(
+                                {
+                                  ...store,
+                                  departures: store.departures.map((d) =>
+                                    d.id === dep.id
+                                      ? { ...d, availableSpots: nextSpots }
+                                      : d
+                                  ),
+                                },
+                                `Cupos libres de ${dep.destination} actualizados a ${nextSpots}`
+                              );
+                            }}
+                            className="px-2.5 py-1.5 text-xs font-bold text-[#263D32] hover:bg-[#D8CEB9] cursor-pointer"
+                          >
+                            -1 cupo
+                          </button>
+                          <button
+                            type="button"
+                            title="Liberar / sumar 1 cupo libre"
+                            onClick={() => {
+                              const currentSpots =
+                                dep.availableSpots ?? dep.maxParticipants;
+                              const nextSpots = Math.min(
+                                dep.maxParticipants,
+                                currentSpots + 1
+                              );
+                              persistStore(
+                                {
+                                  ...store,
+                                  departures: store.departures.map((d) =>
+                                    d.id === dep.id
+                                      ? { ...d, availableSpots: nextSpots }
+                                      : d
+                                  ),
+                                },
+                                `Cupos libres de ${dep.destination} actualizados a ${nextSpots}`
+                              );
+                            }}
+                            className="px-2.5 py-1.5 text-xs font-bold text-[#263D32] hover:bg-[#D8CEB9] border-l border-[#D8CEB9] cursor-pointer"
+                          >
+                            +1 cupo
+                          </button>
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteDeparture(dep.id)}
+                          className="p-2.5 text-[#746657] hover:text-red-700 border border-[#D8CEB9] hover:border-red-300 transition-colors cursor-pointer"
+                          aria-label="Eliminar salida"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
                     </div>
-                    <h4 className="font-editorial text-2xl text-[#263D32]">
-                      {dep.destination}
-                    </h4>
-                    <p className="text-xs text-[#746657]">
-                      {dep.serviceGroupType} · Cupo máx: {dep.maxParticipants} ·
-                      Disponibles: {dep.availableSpots ?? "A consultar"} ·{" "}
-                      {dep.duration}
-                    </p>
-                    {dep.additionalInfo && (
-                      <p className="text-xs text-[#292D29]/75 pt-1">
-                        {dep.additionalInfo}
-                      </p>
+
+                    {/* Active Passengers Enrolled in this Departure */}
+                    {enrolledInquiries.length > 0 && (
+                      <div className="pt-3 border-t border-[#D8CEB9] space-y-2">
+                        <span className="text-[10px] uppercase tracking-[0.2em] text-[#65745A] font-semibold block">
+                          Reservas activas en esta salida ({enrolledInquiries.length}):
+                        </span>
+                        {enrolledInquiries.map((inq) => (
+                          <div
+                            key={inq.id}
+                            className="p-3 bg-[#F2EFE6]/70 border border-[#D8CEB9] flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs"
+                          >
+                            <div>
+                              <strong className="text-[#263D32]">
+                                {inq.fullName}
+                              </strong>{" "}
+                              ({inq.bookingCode}) ·{" "}
+                              <span className="font-semibold text-[#B35B2B]">
+                                Ocupa {inq.participantsCount} cupo(s)
+                              </span>{" "}
+                              · WhatsApp: {inq.whatsapp}
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                handleCancelOrReleaseInquiry(inq.id, false)
+                              }
+                              className="px-3 py-1.5 bg-[#B35B2B] hover:bg-red-800 text-white text-[10px] uppercase tracking-wider font-semibold cursor-pointer self-start sm:self-center"
+                            >
+                              Dar de baja y liberar {inq.participantsCount} cupo(s)
+                            </button>
+                          </div>
+                        ))}
+                      </div>
                     )}
                   </div>
-
-                  <button
-                    type="button"
-                    onClick={() => handleDeleteDeparture(dep.id)}
-                    className="self-start sm:self-center p-2.5 text-[#746657] hover:text-red-700 border border-[#D8CEB9] hover:border-red-300 transition-colors cursor-pointer"
-                    aria-label="Eliminar salida"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         )}
@@ -1362,14 +1506,24 @@ export default function AdminDashboardPage() {
                           </span>
                         )}
                         <span className="px-2.5 py-1 bg-[#263D32] text-[#F2EFE6] text-xs font-medium">
-                          Fecha deseada: {inq.desiredDate}
+                          Fecha: {inq.desiredDate}
                         </span>
-                        <span className="px-2.5 py-1 bg-[#D8CEB9]/60 text-[#263D32] text-xs font-medium">
-                          {inq.selectedServiceTitle || inq.experienceType} ({inq.serviceGroupType})
-                        </span>
+                        {inq.departureId ? (
+                          <span className="px-2.5 py-1 bg-[#263D32]/15 text-[#263D32] border border-[#263D32]/30 text-xs font-semibold">
+                            Salida Precargada (Con seña ·{" "}
+                            {inq.spotsReleased
+                              ? "Cupos ya liberados"
+                              : `Ocupa ${inq.participantsCount} cupo/s`}
+                            )
+                          </span>
+                        ) : (
+                          <span className="px-2.5 py-1 bg-[#D8CEB9]/60 text-[#292D29] text-xs font-medium">
+                            Solicitud de Día Libre (Sin seña previa)
+                          </span>
+                        )}
                         <span className="text-xs text-[#746657]">
-                          Nivel: {inq.skillLevel} · {inq.participantsCount}{" "}
-                          persona(s)
+                          {inq.selectedServiceTitle || inq.experienceType} ·{" "}
+                          {inq.serviceGroupType} ({inq.participantsCount} pers.)
                         </span>
                       </div>
 
@@ -1406,7 +1560,7 @@ export default function AdminDashboardPage() {
                       )}
                     </div>
 
-                    <div className="flex items-center gap-3">
+                    <div className="flex flex-wrap items-center gap-2">
                       <select
                         value={inq.status}
                         onChange={(e) => {
@@ -1415,6 +1569,10 @@ export default function AdminDashboardPage() {
                             | "Contactado"
                             | "Confirmado"
                             | "Cancelado";
+                          if (newStatus === "Cancelado") {
+                            handleCancelOrReleaseInquiry(inq.id, false);
+                            return;
+                          }
                           const updated: TraumStoreData = {
                             ...store,
                             inquiries: store.inquiries.map((item) =>
@@ -1430,8 +1588,33 @@ export default function AdminDashboardPage() {
                         <option value="Pendiente">Pendiente</option>
                         <option value="Contactado">Contactado</option>
                         <option value="Confirmado">Confirmado</option>
-                        <option value="Cancelado">Cancelado</option>
+                        <option value="Cancelado">Cancelado (Baja)</option>
                       </select>
+
+                      {inq.status !== "Cancelado" && (
+                        <button
+                          type="button"
+                          onClick={() =>
+                            handleCancelOrReleaseInquiry(inq.id, false)
+                          }
+                          className="px-3 py-2 bg-[#B35B2B] hover:bg-red-800 text-white text-xs uppercase tracking-wider font-semibold cursor-pointer"
+                        >
+                          {inq.departureId && !inq.spotsReleased
+                            ? `Dar de baja y liberar ${inq.participantsCount} cupo(s)`
+                            : "Dar de baja"}
+                        </button>
+                      )}
+
+                      <button
+                        type="button"
+                        onClick={() =>
+                          handleCancelOrReleaseInquiry(inq.id, true)
+                        }
+                        title="Eliminar pedido y liberar cupos si corresponde"
+                        className="p-2 border border-[#D8CEB9] text-[#746657] hover:text-red-700 hover:border-red-300 cursor-pointer"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
                     </div>
                   </div>
                 ))}

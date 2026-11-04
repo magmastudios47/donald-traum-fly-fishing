@@ -96,6 +96,13 @@ export default function FishingMapWidget({
         setTimeout(() => {
           map.invalidateSize();
         }, 250);
+
+        if (typeof ResizeObserver !== "undefined" && mapContainerRef.current) {
+          const ro = new ResizeObserver(() => {
+            map.invalidateSize();
+          });
+          ro.observe(mapContainerRef.current);
+        }
       }
 
       const map = mapInstanceRef.current as {
@@ -259,12 +266,11 @@ export default function FishingMapWidget({
 
       {/* Map + Active Spot Detail Card */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-stretch">
-        {/* Interactive Map Container (7 cols) */}
-        <div className="lg:col-span-7 min-h-[420px] sm:min-h-[480px] border border-[#D8CEB9] shadow-lg relative overflow-hidden bg-[#D8CEB9]/30">
+        {/* Interactive Map Container (7 cols) — Fills 100% of vertical space with zero empty bar */}
+        <div className="lg:col-span-7 min-h-[450px] sm:min-h-[520px] lg:min-h-[580px] h-full border border-[#D8CEB9] shadow-lg relative overflow-hidden bg-[#263D32]">
           <div
             ref={mapContainerRef}
-            style={{ height: "480px", width: "100%" }}
-            className="w-full h-full min-h-[420px] sm:min-h-[480px] z-10"
+            className="absolute inset-0 w-full h-full z-10"
           />
         </div>
 
@@ -333,7 +339,7 @@ export default function FishingMapWidget({
                   className="w-full py-3.5 px-5 bg-[#D8CEB9] text-[#263D32] hover:bg-[#F2EFE6] text-xs uppercase tracking-[0.22em] font-semibold transition-colors flex items-center justify-center gap-2 cursor-pointer"
                 >
                   <Compass className="w-4 h-4" />
-                  <span>Contratar salida en {selectedDest.name}</span>
+                  <span>Consultar salida en {selectedDest.name}</span>
                 </button>
 
                 <a

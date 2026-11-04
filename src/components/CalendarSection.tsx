@@ -16,9 +16,15 @@ interface CalendarSectionProps {
   departures: CalendarDeparture[];
   onRequestBookingFromCalendar: (prefill: {
     date: string;
+    departureId?: string;
+    requiresDeposit?: boolean;
+    availableSpots?: number | null;
+    maxParticipants?: number;
     experienceType?: string;
     serviceGroupType?: string;
     destination?: string;
+    priceReference?: string;
+    paymentLink?: string;
   }) => void;
 }
 
@@ -350,23 +356,36 @@ export default function CalendarSection({
                       </div>
                       <div>
                         <span className="text-[10px] uppercase tracking-[0.2em] text-[#899487] block">
-                          Cupos disponibles
+                          Cupos libres
                         </span>
-                        <span className="text-sm font-medium text-[#D8CEB9]">
-                          {dep.availableSpots !== null
-                            ? `${dep.availableSpots} lugares`
+                        <span
+                          className={`text-sm font-semibold ${
+                            dep.availableSpots === 0
+                              ? "text-[#E59872]"
+                              : "text-[#D8CEB9]"
+                          }`}
+                        >
+                          {dep.availableSpots === 0
+                            ? "Sin cupos libres (Completo)"
+                            : dep.availableSpots !== null
+                            ? `${dep.availableSpots} libre(s) de ${dep.maxParticipants}`
                             : "A consultar"}
                         </span>
                       </div>
                     </div>
 
-                    <div className="pt-2 border-t border-[#899487]/20">
-                      <span className="text-[10px] uppercase tracking-[0.2em] text-[#899487] block mb-1">
-                        Duración
-                      </span>
-                      <span className="text-xs text-[#F2EFE6]/90 inline-flex items-center gap-1.5">
-                        <Clock className="w-3.5 h-3.5 text-[#D8CEB9]" />
-                        {dep.duration}
+                    <div className="pt-2 border-t border-[#899487]/20 flex items-center justify-between gap-2">
+                      <div>
+                        <span className="text-[10px] uppercase tracking-[0.2em] text-[#899487] block mb-1">
+                          Duración
+                        </span>
+                        <span className="text-xs text-[#F2EFE6]/90 inline-flex items-center gap-1.5">
+                          <Clock className="w-3.5 h-3.5 text-[#D8CEB9]" />
+                          {dep.duration}
+                        </span>
+                      </div>
+                      <span className="px-2.5 py-1 bg-[#D8CEB9]/15 border border-[#D8CEB9]/35 text-[10px] uppercase tracking-[0.18em] text-[#D8CEB9] font-semibold">
+                        Reserva con seña
                       </span>
                     </div>
 
@@ -383,18 +402,36 @@ export default function CalendarSection({
 
                     <button
                       type="button"
+                      disabled={dep.availableSpots === 0}
                       onClick={() =>
                         onRequestBookingFromCalendar({
                           date: dep.date,
+                          departureId: dep.id,
+                          requiresDeposit: true,
+                          availableSpots:
+                            dep.availableSpots !== null
+                              ? dep.availableSpots
+                              : dep.maxParticipants,
+                          maxParticipants: dep.maxParticipants,
                           experienceType: dep.experienceType,
                           serviceGroupType: dep.serviceGroupType,
                           destination: dep.destination,
+                          priceReference: dep.priceLabel,
+                          paymentLink: dep.paymentLink,
                         })
                       }
-                      className="w-full py-3.5 px-5 bg-[#D8CEB9] text-[#263D32] hover:bg-[#F2EFE6] text-xs uppercase tracking-[0.22em] font-semibold transition-colors flex items-center justify-center gap-2 cursor-pointer"
+                      className={`w-full py-3.5 px-5 text-xs uppercase tracking-[0.2em] font-semibold transition-colors flex items-center justify-center gap-2 ${
+                        dep.availableSpots === 0
+                          ? "bg-[#292D29] text-[#899487] border border-[#899487]/30 cursor-not-allowed"
+                          : "bg-[#D8CEB9] text-[#263D32] hover:bg-[#F2EFE6] cursor-pointer"
+                      }`}
                     >
                       <Compass className="w-4 h-4" />
-                      <span>Consultar disponibilidad</span>
+                      <span>
+                        {dep.availableSpots === 0
+                          ? "Salida completa — Sin cupos libres"
+                          : "Contratar cupo en esta salida (Con seña)"}
+                      </span>
                     </button>
                   </div>
                 ))}
@@ -403,14 +440,15 @@ export default function CalendarSection({
               <div className="space-y-6">
                 <div className="p-5 bg-[#292D29]/40 border border-[#899487]/25 space-y-3">
                   <span className="inline-block px-2.5 py-1 bg-[#65745A]/40 text-[#D8CEB9] text-[10px] uppercase tracking-[0.2em]">
-                    Fecha abierta para planificar a medida
+                    Día libre · Solicitud sin seña previa
                   </span>
                   <p className="text-sm text-[#F2EFE6]/85 font-light leading-relaxed">
-                    Seleccioná este día para solicitar una{" "}
+                    Al pedir reservar un día sin evento precargado{" "}
                     <strong className="font-medium text-[#D8CEB9]">
-                      salida privada, individual o para tu grupo
-                    </strong>{" "}
-                    eligiendo la modalidad y el río que prefieras.
+                      no se abona seña en este momento
+                    </strong>
+                    , ya que primero verificamos si ese día es posible realizar
+                    la salida y te confirmamos por correo.
                   </p>
                 </div>
 
@@ -428,9 +466,9 @@ export default function CalendarSection({
                     </span>
                   </div>
                   <div className="flex items-center justify-between py-2 border-b border-[#899487]/20">
-                    <span>Confirmación:</span>
-                    <span className="text-[#D8CEB9]">
-                      Sujeta a disponibilidad operativa
+                    <span>Seña al consultar el día:</span>
+                    <span className="text-[#D8CEB9] font-semibold">
+                      Sin seña (sujeto a confirmación)
                     </span>
                   </div>
                 </div>
@@ -440,12 +478,13 @@ export default function CalendarSection({
                   onClick={() =>
                     onRequestBookingFromCalendar({
                       date: selectedDateStr,
+                      requiresDeposit: false,
                     })
                   }
                   className="w-full py-4 px-5 bg-[#D8CEB9] text-[#263D32] hover:bg-[#F2EFE6] text-xs uppercase tracking-[0.22em] font-semibold transition-colors flex items-center justify-center gap-2 cursor-pointer"
                 >
                   <Compass className="w-4 h-4" />
-                  <span>Consultar disponibilidad en esta fecha</span>
+                  <span>Pedir reservar este día (Sin seña)</span>
                 </button>
               </div>
             )}

@@ -23,6 +23,7 @@ export const initialTraumData: TraumStoreData = {
     legalAddress: "Junín de los Andes (CP 8371), Provincia del Neuquén, República Argentina",
     guideLicenseNumber: "Guía de Pesca Deportiva Habilitado — Reglamento Continental Patagónico",
     googleClientId: "",
+    web3FormsAccessKey: "fa183ece-13f6-4360-8085-ff84ba3ea870",
     smtpUser: "traumflyfishing9@gmail.com",
     smtpAppPassword: "",
     resendApiKey: "",
@@ -143,16 +144,16 @@ export const initialTraumData: TraumStoreData = {
     {
       id: "dest-malleo",
       name: "Río Malleo",
-      location: "Junín de los Andes, Neuquén",
+      location: "Parque Nacional Lanín · Ruta Prov. 23, Neuquén",
       imageUrl:
         "https://upload.wikimedia.org/wikipedia/commons/6/65/Malleo_River.JPG",
       description:
-        "Un clásico mundial del vadeo patagónico. Nace en el Lago Tromen y serpentea entre sauces, estepa y vistas imponentes al Volcán Lanín, ofreciendo aguas cristalinas ideales para la pesca con mosca seca y ninfas.",
+        "Un clásico mundial del vadeo patagónico. Nace en el Lago Tromen y serpentea por el valle entre sauces, estepa y vistas imponentes al Volcán Lanín, ofreciendo aguas cristalinas ideales para la pesca con mosca seca y ninfas.",
       modalities: ["Pesca de vadeo", "Salida personalizada"],
       isReferenceDemo: false,
-      lat: -39.7765,
-      lng: -71.2248,
-      distanceFromJunin: "28 km al norte de Junín de los Andes",
+      lat: -39.6225,
+      lng: -71.1865,
+      distanceFromJunin: "35 km al norte de Junín de los Andes por RP 60 / RP 23",
       waterType: "Río",
     },
     {

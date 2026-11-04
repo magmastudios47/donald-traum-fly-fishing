@@ -4,6 +4,7 @@ import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import {
   BookingInquiry,
+  CalendarDeparture,
   ExperienceItem,
   PaymentConfig,
   ServiceFeatureItem,
@@ -48,8 +49,11 @@ interface ContactSectionProps {
   paymentConfig: PaymentConfig;
   experiences: ExperienceItem[];
   services: ServiceFeatureItem[];
+  departures?: CalendarDeparture[];
   prefillData?: {
     date?: string;
+    departureId?: string;
+    requiresDeposit?: boolean;
     experienceType?: string;
     serviceGroupType?: string;
     destination?: string;
@@ -62,25 +66,23 @@ export default function ContactSection({
   settings,
   paymentConfig,
   experiences,
-  services,
+  departures = [],
   prefillData,
   onInquirySubmitted,
 }: ContactSectionProps) {
   const { user: googleUser, signIn } = useGoogleSession();
   const [googleModalOpen, setGoogleModalOpen] = useState(false);
 
+  const [bookingMode, setBookingMode] = useState<string>("FREE_DAY"); // "FREE_DAY" or departure.id
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [whatsapp, setWhatsapp] = useState("");
   const [desiredDate, setDesiredDate] = useState("");
-  const [selectedServiceTitle, setSelectedServiceTitle] = useState(
-    "Pesca de vadeo"
-  );
   const [experienceType, setExperienceType] = useState("Pesca de vadeo");
   const [serviceGroupType, setServiceGroupType] = useState(
-    "Salida para dos personas"
+    "Salida individual"
   );
-  const [participantsCount, setParticipantsCount] = useState("2");
+  const [participantsCount, setParticipantsCount] = useState("1");
   const [skillLevel, setSkillLevel] = useState<
     | "Iniciación / Primeros pasos"
     | "Intermedio"
@@ -96,6 +98,17 @@ export default function ContactSection({
   );
   const [copiedAlias, setCopiedAlias] = useState(false);
 
+  const selectedDeparture = departures.find((d) => d.id === bookingMode) || null;
+  const isScheduledDeparture = Boolean(selectedDeparture);
+  const maxAllowedSpots = selectedDeparture
+    ? Math.max(
+        1,
+        selectedDeparture.availableSpots !== null
+          ? selectedDeparture.availableSpots
+          : selectedDeparture.maxParticipants
+      )
+    : 16;
+
   useEffect(() => {
     if (googleUser) {
       if (!fullName) setFullName(googleUser.name);
@@ -105,33 +118,43 @@ export default function ContactSection({
 
   useEffect(() => {
     if (prefillData) {
+      if (prefillData.departureId) {
+        setBookingMode(prefillData.departureId);
+      } else {
+        setBookingMode("FREE_DAY");
+      }
       if (prefillData.date) setDesiredDate(prefillData.date);
       if (prefillData.experienceType)
         setExperienceType(prefillData.experienceType);
       if (prefillData.serviceGroupType)
         setServiceGroupType(prefillData.serviceGroupType);
-      if (prefillData.selectedServiceTitle)
-        setSelectedServiceTitle(prefillData.selectedServiceTitle);
       if (prefillData.destination) {
         setComments((prev) =>
-          prev ? prev : `Interés en destino: ${prefillData.destination}.`
+          prev ? prev : `Destino de interés: ${prefillData.destination}.`
         );
       }
     }
   }, [prefillData]);
 
-  const catalogOptions = [
-    ...experiences.map((e) => ({
-      label: `Experiencia: ${e.title} (${e.modality})`,
-      value: e.title,
-    })),
-    ...services
-      .filter((s) => s.enabled)
-      .map((s) => ({
-        label: `Servicio: ${s.title}`,
-        value: s.title,
-      })),
-  ];
+  const handleModeChange = (nextMode: string) => {
+    setBookingMode(nextMode);
+    const dep = departures.find((d) => d.id === nextMode);
+    if (dep) {
+      setDesiredDate(dep.date);
+      setExperienceType(dep.experienceType);
+      setServiceGroupType("Salida individual");
+      setParticipantsCount("1");
+    }
+  };
+
+  const handleGroupTypeChange = (nextGroup: string) => {
+    setServiceGroupType(nextGroup);
+    if (nextGroup === "Salida individual") {
+      setParticipantsCount("1");
+    } else if (nextGroup === "Salida para dos personas") {
+      setParticipantsCount(String(Math.min(2, maxAllowedSpots)));
+    }
+  };
 
   const handleCopyAlias = () => {
     if (typeof navigator !== "undefined" && navigator.clipboard) {
@@ -147,7 +170,15 @@ export default function ContactSection({
 
     if (!legalAccepted) {
       setErrorMsg(
-        "Debés aceptar los Términos y Condiciones, Política de Seña y Deslinde de Responsabilidad para continuar."
+        "Debés aceptar los Términos y Condiciones y el Deslinde de Responsabilidad para continuar."
+      );
+      return;
+    }
+
+    const spotsNum = Math.max(1, Number(participantsCount) || 1);
+    if (isScheduledDeparture && spotsNum > maxAllowedSpots) {
+      setErrorMsg(
+        `Solo quedan ${maxAllowedSpots} cupo(s) libre(s) en esta salida programada.`
       );
       return;
     }
@@ -155,20 +186,28 @@ export default function ContactSection({
     setSubmitting(true);
 
     try {
+      const effectiveTitle = selectedDeparture
+        ? `Salida Programada: ${selectedDeparture.destination} (${selectedDeparture.date})`
+        : experienceType;
+
       const res = await fetch("/api/traum", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           type: "INQUIRY",
+          departureId: selectedDeparture ? selectedDeparture.id : undefined,
+          requiresDeposit: isScheduledDeparture,
           fullName,
           email,
           googleEmail: googleUser?.email,
           whatsapp,
-          desiredDate: desiredDate || "Fecha a coordinar",
-          selectedServiceTitle,
+          desiredDate: selectedDeparture
+            ? selectedDeparture.date
+            : desiredDate || "Fecha a coordinar",
+          selectedServiceTitle: effectiveTitle,
           experienceType,
           serviceGroupType,
-          participantsCount: Number(participantsCount) || 1,
+          participantsCount: spotsNum,
           skillLevel,
           comments,
           legalAccepted: true,
@@ -176,7 +215,7 @@ export default function ContactSection({
       });
       const data = await res.json();
       if (!res.ok) {
-        setErrorMsg(data?.error || "Error al procesar la contratación.");
+        setErrorMsg(data?.error || "Error al procesar la solicitud.");
         return;
       }
 
@@ -184,37 +223,41 @@ export default function ContactSection({
       setCreatedInquiry(inquiry);
       if (onInquirySubmitted) onInquirySubmitted(inquiry);
 
-      const targetAdminEmail =
-        settings.notificationEmail ||
-        settings.email ||
-        "traumflyfishing9@gmail.com";
-      fetch(
-        `https://formsubmit.co/ajax/${encodeURIComponent(targetAdminEmail)}`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Accept: "application/json",
-          },
-          body: JSON.stringify({
-            _subject: `[TRAUM Pedido ${inquiry.bookingCode}] ${inquiry.selectedServiceTitle} — ${inquiry.fullName}`,
-            _template: "table",
-            _captcha: "false",
-            Codigo_Pedido: inquiry.bookingCode,
-            Servicio_Contratado: inquiry.selectedServiceTitle,
-            Cliente: inquiry.fullName,
-            Email: inquiry.email,
-            WhatsApp: inquiry.whatsapp,
-            Fecha: inquiry.desiredDate,
-            Experiencia: inquiry.experienceType,
-            Modalidad_Grupo: inquiry.serviceGroupType,
-            Participantes: inquiry.participantsCount,
-            Nivel: inquiry.skillLevel,
-            Sena_Requerida: `${paymentConfig.depositPercentage}%`,
-            Comentarios: inquiry.comments || "-",
-          }),
-        }
-      ).catch(() => {});
+      const web3Key =
+        settings.web3FormsAccessKey || "fa183ece-13f6-4360-8085-ff84ba3ea870";
+      const emailSubject = isScheduledDeparture
+        ? `[TRAUM Salida Programada ${inquiry.bookingCode}] ${inquiry.fullName} contrató ${spotsNum} cupo(s) el ${inquiry.desiredDate}`
+        : `[TRAUM Solicitud de Día ${inquiry.bookingCode}] ${inquiry.fullName} pide fecha ${inquiry.desiredDate}`;
+
+      await fetch("https://api.web3forms.com/submit", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+        },
+        body: JSON.stringify({
+          access_key: web3Key,
+          subject: emailSubject,
+          from_name: "TRAUM Fly Cast Patagonia",
+          email: inquiry.email,
+          replyto: inquiry.email,
+          Codigo_Pedido: inquiry.bookingCode,
+          Tipo_de_Reserva: isScheduledDeparture
+            ? `Salida Precargada (Con Seña ${paymentConfig.depositPercentage}% · Descontó ${spotsNum} cupo/s)`
+            : "Solicitud de Día Libre (Sin seña previa — Sujeto a confirmar disponibilidad)",
+          Fecha_Solicitada: inquiry.desiredDate,
+          Servicio_o_Destino: inquiry.selectedServiceTitle,
+          Cliente: inquiry.fullName,
+          Email_Cliente: inquiry.email,
+          Cuenta_Google: inquiry.googleEmail || "No vinculada",
+          WhatsApp: inquiry.whatsapp,
+          Experiencia: inquiry.experienceType,
+          Formato_Grupo: inquiry.serviceGroupType,
+          Cantidad_Personas_Cupos: inquiry.participantsCount,
+          Nivel_Pesca: inquiry.skillLevel,
+          Comentarios: inquiry.comments || "Sin comentarios adicionales",
+        }),
+      }).catch(() => {});
     } catch {
       setErrorMsg("Error de red al enviar la solicitud.");
     } finally {
@@ -228,12 +271,16 @@ export default function ContactSection({
     "traumflyfishing9@gmail.com";
   const cleanWhatsappDigits = settings.whatsappNumber.replace(/[^0-9]/g, "");
   const whatsappDirectUrl = `https://wa.me/${cleanWhatsappDigits}?text=${encodeURIComponent(
-    `Hola TRAUM, mi nombre es ${fullName || "..."}. Acabo de contratar "${selectedServiceTitle}" (${
-      createdInquiry?.bookingCode || "Consulta"
-    }) para fecha ${
+    `Hola TRAUM, mi nombre es ${fullName || "..."}. Acabo de registrar la solicitud ${
+      createdInquiry?.bookingCode || ""
+    } para fecha ${
       desiredDate || "a coordinar"
-    } (${participantsCount} pers.).`
+    } (${experienceType} · ${participantsCount} pers.).`
   )}`;
+
+  const availableDepartures = departures.filter(
+    (d) => d.availableSpots === null || d.availableSpots > 0
+  );
 
   return (
     <section
@@ -248,7 +295,7 @@ export default function ContactSection({
               <div className="flex items-center gap-3 mb-4">
                 <span className="w-8 h-[1px] bg-[#263D32]" />
                 <span className="text-xs uppercase tracking-[0.28em] text-[#65745A] font-semibold">
-                  Contacto y contratación
+                  Contacto y reservas
                 </span>
               </div>
               <h2 className="font-editorial text-4xl sm:text-5xl lg:text-6xl text-[#263D32] leading-[1.12] mb-6">
@@ -256,11 +303,12 @@ export default function ContactSection({
                 <span className="italic text-[#746657]">comienza acá.</span>
               </h2>
               <p className="text-base sm:text-lg text-[#292D29]/85 font-light leading-relaxed">
-                Contratá tu experiencia o servicio directamente desde este
-                formulario. El pedido llega al instante a{" "}
-                <strong>{targetAdminEmail}</strong> y habilita los datos para
-                abonar la seña del{" "}
-                <strong>{paymentConfig.depositPercentage}%</strong>.
+                Podés solicitar un <strong>día libre a medida</strong> (sin
+                seña previa hasta confirmar disponibilidad) o anotarte en una{" "}
+                <strong>salida ya programada del calendario</strong> (con seña
+                del <strong>{paymentConfig.depositPercentage}%</strong> y
+                descuento inmediato de cupos). Todas las solicitudes llegan a{" "}
+                <strong>{targetAdminEmail}</strong>.
               </p>
             </div>
 
@@ -336,15 +384,14 @@ export default function ContactSection({
             <div className="p-5 bg-[#263D32]/5 border border-[#263D32]/20 space-y-2">
               <div className="flex items-center gap-2 text-xs uppercase tracking-[0.2em] text-[#263D32] font-semibold">
                 <CreditCard className="w-4 h-4 text-[#65745A]" />
-                <span>
-                  Contratación segura · Seña del {paymentConfig.depositPercentage}%
-                </span>
+                <span>Política de Seña y Cupos</span>
               </div>
               <p className="text-xs text-[#292D29]/80 font-light leading-relaxed">
-                Los datos bancarios del propietario (Alias y Titular) no se
-                publican de forma abierta: se habilitan exclusivamente al
-                confirmar la solicitud de contratación de uno de nuestros
-                servicios.
+                Al pedir un día libre no se abona seña porque primero
+                confirmamos si ese día está disponible. Solo las salidas
+                precargadas en el calendario solicitan el{" "}
+                <strong>{paymentConfig.depositPercentage}% de seña</strong> al
+                reservar tu cupo.
               </p>
             </div>
           </div>
@@ -355,126 +402,180 @@ export default function ContactSection({
               <div>
                 <span className="text-[10px] uppercase tracking-[0.24em] text-[#746657] block mb-1 font-semibold">
                   {createdInquiry
-                    ? `Paso 2 · Datos de Seña (${paymentConfig.depositPercentage}%)`
-                    : "Paso 1 · Formulario de contratación de servicio"}
+                    ? createdInquiry.requiresDeposit
+                      ? `Paso 2 · Datos de Seña (${paymentConfig.depositPercentage}%)`
+                      : "Solicitud de fecha enviada · Sin seña previa"
+                    : isScheduledDeparture
+                    ? `Salida Programada · Reserva con ${paymentConfig.depositPercentage}% de seña`
+                    : "Consulta de Día Libre · Sin seña previa"}
                 </span>
                 <h3 className="font-editorial text-3xl text-[#263D32]">
                   {createdInquiry
-                    ? `Pedido ${createdInquiry.bookingCode} Confirmado`
-                    : "Contratá tu salida con Traum"}
+                    ? `Solicitud ${createdInquiry.bookingCode} Registrada`
+                    : "Solicitá tu fecha o cupo"}
                 </h3>
               </div>
               <ShieldCheck className="w-6 h-6 text-[#65745A]" />
             </div>
 
             {createdInquiry ? (
-              <div className="space-y-6">
-                <div className="p-6 bg-[#263D32] text-[#F2EFE6] space-y-2">
-                  <div className="flex items-center gap-2 text-[#D8CEB9] text-xs uppercase tracking-[0.22em]">
-                    <CheckCircle2 className="w-4 h-4" />
-                    <span>Pedido enviado a {targetAdminEmail}</span>
-                  </div>
-                  <h4 className="font-editorial text-3xl">
-                    ¡Gracias, {createdInquiry.fullName}!
-                  </h4>
-                  <p className="text-xs sm:text-sm text-[#F2EFE6]/85 font-light leading-relaxed">
-                    A continuación se encuentran habilitados los datos para
-                    abonar la seña del{" "}
-                    <strong>{paymentConfig.depositPercentage}%</strong> por el
-                    servicio <strong>{createdInquiry.selectedServiceTitle}</strong>:
-                  </p>
-                </div>
-
-                {/* Bank Alias & Holder Card (Without CBU) */}
-                <div className="p-6 bg-white border border-[#D8CEB9] space-y-4">
-                  <div className="flex items-center gap-2 text-xs uppercase tracking-[0.2em] text-[#263D32] font-semibold pb-2 border-b border-[#D8CEB9]">
-                    <Landmark className="w-4 h-4" />
-                    <span>
-                      Datos de Transferencia · Seña ({paymentConfig.depositPercentage}%)
-                    </span>
-                  </div>
-
-                  <div className="space-y-2.5 text-xs sm:text-sm">
-                    <div className="flex items-center justify-between py-1.5 border-b border-[#D8CEB9]/50">
-                      <span className="text-[#746657]">Entidad:</span>
-                      <span className="font-medium text-[#292D29]">
-                        {paymentConfig.bankName}
+              createdInquiry.requiresDeposit ? (
+                <div className="space-y-6">
+                  <div className="p-6 bg-[#263D32] text-[#F2EFE6] space-y-2">
+                    <div className="flex items-center gap-2 text-[#D8CEB9] text-xs uppercase tracking-[0.22em]">
+                      <CheckCircle2 className="w-4 h-4" />
+                      <span>
+                        Cupo descontado · Pedido enviado a {targetAdminEmail}
                       </span>
                     </div>
-                    <div className="flex items-center justify-between py-1.5 border-b border-[#D8CEB9]/50">
-                      <span className="text-[#746657]">Titular:</span>
-                      <span className="font-medium text-[#292D29]">
-                        {paymentConfig.bankHolder}
+                    <h4 className="font-editorial text-3xl">
+                      ¡Gracias, {createdInquiry.fullName}!
+                    </h4>
+                    <p className="text-xs sm:text-sm text-[#F2EFE6]/85 font-light leading-relaxed">
+                      A continuación se encuentran habilitados los datos para
+                      abonar la seña del{" "}
+                      <strong>{paymentConfig.depositPercentage}%</strong> por{" "}
+                      <strong>{createdInquiry.selectedServiceTitle}</strong> (
+                      {createdInquiry.participantsCount} cupo/s):
+                    </p>
+                  </div>
+
+                  {/* Bank Alias & Holder Card (Without CBU) */}
+                  <div className="p-6 bg-white border border-[#D8CEB9] space-y-4">
+                    <div className="flex items-center gap-2 text-xs uppercase tracking-[0.2em] text-[#263D32] font-semibold pb-2 border-b border-[#D8CEB9]">
+                      <Landmark className="w-4 h-4" />
+                      <span>
+                        Datos de Transferencia · Seña (
+                        {paymentConfig.depositPercentage}%)
                       </span>
                     </div>
-                    <div className="flex items-center justify-between py-2.5 px-3.5 bg-[#F2EFE6] border border-[#D8CEB9]">
-                      <div>
-                        <span className="text-[10px] uppercase tracking-[0.2em] text-[#746657] block">
-                          Alias Bancario
-                        </span>
-                        <span className="text-base font-bold text-[#263D32] tracking-wider">
-                          {paymentConfig.bankAlias}
+
+                    <div className="space-y-2.5 text-xs sm:text-sm">
+                      <div className="flex items-center justify-between py-1.5 border-b border-[#D8CEB9]/50">
+                        <span className="text-[#746657]">Entidad:</span>
+                        <span className="font-medium text-[#292D29]">
+                          {paymentConfig.bankName}
                         </span>
                       </div>
-                      <button
-                        type="button"
-                        onClick={handleCopyAlias}
-                        className="px-3 py-1.5 bg-[#263D32] text-[#F2EFE6] text-[10px] uppercase tracking-wider font-semibold flex items-center gap-1.5 cursor-pointer"
-                      >
-                        <Copy className="w-3 h-3" />
-                        <span>{copiedAlias ? "Copiado" : "Copiar Alias"}</span>
-                      </button>
+                      <div className="flex items-center justify-between py-1.5 border-b border-[#D8CEB9]/50">
+                        <span className="text-[#746657]">Titular:</span>
+                        <span className="font-medium text-[#292D29]">
+                          {paymentConfig.bankHolder}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between py-2.5 px-3.5 bg-[#F2EFE6] border border-[#D8CEB9]">
+                        <div>
+                          <span className="text-[10px] uppercase tracking-[0.2em] text-[#746657] block">
+                            Alias Bancario
+                          </span>
+                          <span className="text-base font-bold text-[#263D32] tracking-wider">
+                            {paymentConfig.bankAlias}
+                          </span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={handleCopyAlias}
+                          className="px-3 py-1.5 bg-[#263D32] text-[#F2EFE6] text-[10px] uppercase tracking-wider font-semibold flex items-center gap-1.5 cursor-pointer"
+                        >
+                          <Copy className="w-3 h-3" />
+                          <span>
+                            {copiedAlias ? "Copiado" : "Copiar Alias"}
+                          </span>
+                        </button>
+                      </div>
                     </div>
+
+                    {(paymentConfig.mercadoPagoLink ||
+                      paymentConfig.internationalPaymentLink) && (
+                      <div className="pt-2 space-y-2">
+                        {paymentConfig.mercadoPagoLink && (
+                          <a
+                            href={paymentConfig.mercadoPagoLink}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="w-full py-3 px-4 bg-[#263D32] text-[#F2EFE6] hover:bg-[#65745A] text-xs uppercase tracking-[0.2em] font-semibold flex items-center justify-center gap-2"
+                          >
+                            <span>Pagar seña con Mercado Pago</span>
+                            <ExternalLink className="w-3.5 h-3.5" />
+                          </a>
+                        )}
+                        {paymentConfig.internationalPaymentLink && (
+                          <a
+                            href={paymentConfig.internationalPaymentLink}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="w-full py-3 px-4 border border-[#263D32] text-[#263D32] hover:bg-[#263D32] hover:text-[#F2EFE6] text-xs uppercase tracking-[0.2em] font-semibold flex items-center justify-center gap-2"
+                          >
+                            <span>Pago Internacional (PayPal / Tarjeta)</span>
+                            <ExternalLink className="w-3.5 h-3.5" />
+                          </a>
+                        )}
+                      </div>
+                    )}
                   </div>
 
-                  {(paymentConfig.mercadoPagoLink ||
-                    paymentConfig.internationalPaymentLink) && (
-                    <div className="pt-2 space-y-2">
-                      {paymentConfig.mercadoPagoLink && (
-                        <a
-                          href={paymentConfig.mercadoPagoLink}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="w-full py-3 px-4 bg-[#263D32] text-[#F2EFE6] hover:bg-[#65745A] text-xs uppercase tracking-[0.2em] font-semibold flex items-center justify-center gap-2"
-                        >
-                          <span>Pagar seña con Mercado Pago</span>
-                          <ExternalLink className="w-3.5 h-3.5" />
-                        </a>
-                      )}
-                      {paymentConfig.internationalPaymentLink && (
-                        <a
-                          href={paymentConfig.internationalPaymentLink}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="w-full py-3 px-4 border border-[#263D32] text-[#263D32] hover:bg-[#263D32] hover:text-[#F2EFE6] text-xs uppercase tracking-[0.2em] font-semibold flex items-center justify-center gap-2"
-                        >
-                          <span>Pago Internacional (PayPal / Tarjeta)</span>
-                          <ExternalLink className="w-3.5 h-3.5" />
-                        </a>
-                      )}
+                  <div className="flex flex-col sm:flex-row items-center justify-center gap-4 pt-2">
+                    <a
+                      href={whatsappDirectUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="w-full sm:flex-1 px-6 py-3.5 bg-[#263D32] text-[#F2EFE6] hover:bg-[#65745A] text-xs uppercase tracking-[0.2em] font-semibold transition-colors inline-flex items-center justify-center gap-2"
+                    >
+                      <MessageCircle className="w-4 h-4 text-[#D8CEB9]" />
+                      <span>Enviar comprobante por WhatsApp</span>
+                    </a>
+                    <button
+                      type="button"
+                      onClick={() => setCreatedInquiry(null)}
+                      className="w-full sm:w-auto px-6 py-3.5 border border-[#746657]/40 text-[#292D29] hover:bg-[#D8CEB9]/40 text-xs uppercase tracking-[0.2em] transition-colors cursor-pointer"
+                    >
+                      Nueva solicitud
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                /* DÍA LIBRE SOLICITADO -> CONFIRMACIÓN SIN SEÑA */
+                <div className="space-y-6">
+                  <div className="p-6 bg-[#263D32] text-[#F2EFE6] space-y-3">
+                    <div className="flex items-center gap-2 text-[#D8CEB9] text-xs uppercase tracking-[0.22em]">
+                      <CheckCircle2 className="w-5 h-5" />
+                      <span>
+                        Solicitud enviada por correo a {targetAdminEmail}
+                      </span>
                     </div>
-                  )}
-                </div>
+                    <h4 className="font-editorial text-3xl">
+                      ¡Gracias, {createdInquiry.fullName}!
+                    </h4>
+                    <p className="text-xs sm:text-sm text-[#F2EFE6]/85 font-light leading-relaxed">
+                      Tu solicitud (<strong>{createdInquiry.bookingCode}</strong>
+                      ) para el día <strong>{createdInquiry.desiredDate}</strong>{" "}
+                      fue enviada a nuestro equipo. Como se trata de pedir un
+                      día libre,{" "}
+                      <strong>no debés abonar ninguna seña ahora</strong> hasta
+                      que confirmemos disponibilidad para esa fecha.
+                    </p>
+                  </div>
 
-                <div className="flex flex-col sm:flex-row items-center justify-center gap-4 pt-2">
-                  <a
-                    href={whatsappDirectUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="w-full sm:flex-1 px-6 py-3.5 bg-[#263D32] text-[#F2EFE6] hover:bg-[#65745A] text-xs uppercase tracking-[0.2em] font-semibold transition-colors inline-flex items-center justify-center gap-2"
-                  >
-                    <MessageCircle className="w-4 h-4 text-[#D8CEB9]" />
-                    <span>Enviar comprobante por WhatsApp</span>
-                  </a>
-                  <button
-                    type="button"
-                    onClick={() => setCreatedInquiry(null)}
-                    className="w-full sm:w-auto px-6 py-3.5 border border-[#746657]/40 text-[#292D29] hover:bg-[#D8CEB9]/40 text-xs uppercase tracking-[0.2em] transition-colors cursor-pointer"
-                  >
-                    Contratar otro servicio
-                  </button>
+                  <div className="flex flex-col sm:flex-row items-center justify-center gap-4 pt-2">
+                    <a
+                      href={whatsappDirectUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="w-full sm:flex-1 px-6 py-3.5 bg-[#263D32] text-[#F2EFE6] hover:bg-[#65745A] text-xs uppercase tracking-[0.2em] font-semibold transition-colors inline-flex items-center justify-center gap-2"
+                    >
+                      <MessageCircle className="w-4 h-4 text-[#D8CEB9]" />
+                      <span>Escribir por WhatsApp</span>
+                    </a>
+                    <button
+                      type="button"
+                      onClick={() => setCreatedInquiry(null)}
+                      className="w-full sm:w-auto px-6 py-3.5 border border-[#746657]/40 text-[#292D29] hover:bg-[#D8CEB9]/40 text-xs uppercase tracking-[0.2em] transition-colors cursor-pointer"
+                    >
+                      Enviar otra consulta
+                    </button>
+                  </div>
                 </div>
-              </div>
+              )
             ) : (
               <form onSubmit={handleSubmit} className="space-y-5">
                 {/* Google Fast Fill */}
@@ -491,8 +592,8 @@ export default function ContactSection({
                       </span>
                     ) : (
                       <span>
-                        Podés vincular tu cuenta de Google para autocompletar tu
-                        pedido
+                        Podés vincular tu cuenta de Google para autocompletar
+                        tus datos
                       </span>
                     )}
                   </div>
@@ -507,16 +608,21 @@ export default function ContactSection({
 
                 <div>
                   <label className="block text-[11px] uppercase tracking-[0.2em] text-[#292D29] font-semibold mb-2">
-                    Servicio a contratar *
+                    Tipo de solicitud *
                   </label>
                   <select
-                    value={selectedServiceTitle}
-                    onChange={(e) => setSelectedServiceTitle(e.target.value)}
+                    value={bookingMode}
+                    onChange={(e) => handleModeChange(e.target.value)}
                     className="w-full px-4 py-3 bg-white border border-[#D8CEB9] focus:border-[#263D32] focus:outline-none text-sm text-[#263D32] font-medium"
                   >
-                    {catalogOptions.map((opt, idx) => (
-                      <option key={idx} value={opt.value}>
-                        {opt.label}
+                    <option value="FREE_DAY">
+                      Pedir reservar un día libre a medida (Sin seña previa)
+                    </option>
+                    {availableDepartures.map((dep) => (
+                      <option key={dep.id} value={dep.id}>
+                        Salida Programada {dep.date} — {dep.destination} (
+                        {dep.availableSpots} de {dep.maxParticipants} cupos
+                        libres · Con seña {paymentConfig.depositPercentage}%)
                       </option>
                     ))}
                   </select>
@@ -569,13 +675,21 @@ export default function ContactSection({
 
                   <div>
                     <label className="block text-[11px] uppercase tracking-[0.2em] text-[#292D29] font-semibold mb-2">
-                      Fecha deseada (o aproximada)
+                      Fecha {isScheduledDeparture ? "programada" : "deseada"} *
                     </label>
                     <input
                       type="date"
-                      value={desiredDate}
+                      required
+                      readOnly={isScheduledDeparture}
+                      value={
+                        selectedDeparture ? selectedDeparture.date : desiredDate
+                      }
                       onChange={(e) => setDesiredDate(e.target.value)}
-                      className="w-full px-4 py-3 bg-white border border-[#D8CEB9] focus:border-[#263D32] focus:outline-none text-sm text-[#292D29]"
+                      className={`w-full px-4 py-3 border border-[#D8CEB9] focus:border-[#263D32] focus:outline-none text-sm text-[#292D29] ${
+                        isScheduledDeparture
+                          ? "bg-[#F2EFE6] font-semibold text-[#263D32]"
+                          : "bg-white"
+                      }`}
                     />
                   </div>
                 </div>
@@ -590,28 +704,28 @@ export default function ContactSection({
                       onChange={(e) => setExperienceType(e.target.value)}
                       className="w-full px-4 py-3 bg-white border border-[#D8CEB9] focus:border-[#263D32] focus:outline-none text-sm text-[#292D29]"
                     >
-                      <option value="Pesca de vadeo">Pesca de vadeo</option>
-                      <option value="Pesca en balsa">Pesca en balsa</option>
-                      <option value="Salida personalizada">
-                        Salida personalizada
-                      </option>
+                      {experiences.map((exp) => (
+                        <option key={exp.id} value={exp.title}>
+                          {exp.title}
+                        </option>
+                      ))}
                     </select>
                   </div>
 
                   <div>
                     <label className="block text-[11px] uppercase tracking-[0.2em] text-[#292D29] font-semibold mb-2">
-                      Modalidad de grupo
+                      Formato de grupo
                     </label>
                     <select
                       value={serviceGroupType}
-                      onChange={(e) => setServiceGroupType(e.target.value)}
+                      onChange={(e) => handleGroupTypeChange(e.target.value)}
                       className="w-full px-4 py-3 bg-white border border-[#D8CEB9] focus:border-[#263D32] focus:outline-none text-sm text-[#292D29]"
                     >
                       <option value="Salida individual">
-                        Salida individual
+                        Salida individual (1 cupo)
                       </option>
                       <option value="Salida para dos personas">
-                        Salida para dos personas
+                        Salida para dos personas (2 cupos)
                       </option>
                       <option value="Salida grupal">Salida grupal</option>
                       <option value="Salida privada o personalizada">
@@ -624,15 +738,17 @@ export default function ContactSection({
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
                   <div>
                     <label className="block text-[11px] uppercase tracking-[0.2em] text-[#292D29] font-semibold mb-2">
-                      Cantidad de participantes
+                      {isScheduledDeparture
+                        ? `Cupos a ocupar (Máx. ${maxAllowedSpots} libres)`
+                        : "Cantidad de participantes"}
                     </label>
                     <input
                       type="number"
                       min={1}
-                      max={16}
+                      max={maxAllowedSpots}
                       value={participantsCount}
                       onChange={(e) => setParticipantsCount(e.target.value)}
-                      className="w-full px-4 py-3 bg-white border border-[#D8CEB9] focus:border-[#263D32] focus:outline-none text-sm text-[#292D29]"
+                      className="w-full px-4 py-3 bg-white border border-[#D8CEB9] focus:border-[#263D32] focus:outline-none text-sm text-[#292D29] font-semibold"
                     />
                   </div>
 
@@ -694,9 +810,15 @@ export default function ContactSection({
                     >
                       Términos y Condiciones Comerciales
                     </Link>
-                    , el régimen de reserva con{" "}
-                    <strong>{paymentConfig.depositPercentage}% de seña</strong>,
-                    el{" "}
+                    {isScheduledDeparture ? (
+                      <>
+                        , el régimen de reserva con{" "}
+                        <strong>
+                          {paymentConfig.depositPercentage}% de seña
+                        </strong>
+                      </>
+                    ) : null}
+                    , el{" "}
                     <Link
                       href="/terminos#deslinde"
                       target="_blank"
@@ -724,8 +846,9 @@ export default function ContactSection({
 
                 <div className="pt-2 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                   <p className="text-[11px] text-[#746657] leading-relaxed max-w-xs">
-                    * Al confirmar el pedido recibirás en pantalla los datos de
-                    Alias y Titular para abonar la seña.
+                    {isScheduledDeparture
+                      ? `* Al confirmar se descontarán tus cupos y verás los datos para abonar el ${paymentConfig.depositPercentage}% de seña.`
+                      : `* Al pedir un día libre no abonás seña ahora; tu consulta se envía por mail a ${targetAdminEmail}.`}
                   </p>
 
                   <button
@@ -736,8 +859,10 @@ export default function ContactSection({
                     <Send className="w-4 h-4" />
                     <span>
                       {submitting
-                        ? "Registrando pedido..."
-                        : "Contratar y ver datos de seña"}
+                        ? "Enviando solicitud..."
+                        : isScheduledDeparture
+                        ? `Contratar ${participantsCount} cupo(s) (Con seña)`
+                        : "Pedir reservar este día (Sin seña)"}
                     </span>
                   </button>
                 </div>

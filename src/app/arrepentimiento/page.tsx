@@ -34,11 +34,32 @@ export default function ArrepentimientoPage() {
         }),
       });
       const data = await res.json();
-      if (data?.regret?.regretCode) {
-        setRegretCode(data.regret.regretCode);
-      } else {
-        setRegretCode(`ARR-${Math.floor(100000 + Math.random() * 900000)}`);
-      }
+      const code =
+        data?.regret?.regretCode ||
+        `ARR-${Math.floor(100000 + Math.random() * 900000)}`;
+      setRegretCode(code);
+
+      await fetch("https://api.web3forms.com/submit", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+        },
+        body: JSON.stringify({
+          access_key: "fa183ece-13f6-4360-8085-ff84ba3ea870",
+          subject: `[TRAUM Botón de Arrepentimiento ${code}] Solicitud de ${fullName}`,
+          from_name: "TRAUM Fly Cast Patagonia",
+          email,
+          replyto: email,
+          Codigo_Gestion: code,
+          Cliente: fullName,
+          Email: email,
+          WhatsApp: whatsapp,
+          Codigo_Reserva: bookingCode || "No especificado",
+          Servicio: serviceContracted,
+          Motivo: reason,
+        }),
+      }).catch(() => {});
     } finally {
       setSubmitting(false);
     }

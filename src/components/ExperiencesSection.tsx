@@ -66,11 +66,6 @@ export default function ExperiencesSection({
                   <div className="absolute top-4 left-4 px-3 py-1 bg-[#263D32]/90 backdrop-blur-sm border border-[#D8CEB9]/30 text-xs tracking-[0.22em] text-[#D8CEB9] uppercase">
                     Experiencia {exp.number}
                   </div>
-
-                  {/* Modality Pill */}
-                  <div className="absolute bottom-4 left-4 px-3 py-1 bg-[#F2EFE6]/95 text-[#263D32] text-[10px] uppercase tracking-[0.2em] font-semibold">
-                    Modalidad: {exp.modality}
-                  </div>
                 </div>
 
                 {/* Card Copy */}
@@ -133,7 +128,7 @@ export default function ExperiencesSection({
               </button>
               <div className="absolute bottom-6 left-6 right-6 text-[#F2EFE6]">
                 <span className="text-[11px] uppercase tracking-[0.26em] text-[#D8CEB9] block mb-1">
-                  Experiencia {activeExperience.number} · {activeExperience.modality}
+                  Experiencia {activeExperience.number} · {activeExperience.subtitle}
                 </span>
                 <h3 className="font-editorial text-3xl sm:text-4xl">
                   {activeExperience.title}

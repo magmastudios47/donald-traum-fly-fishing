@@ -27,6 +27,26 @@ function normalizeStore(parsed: Partial<TraumStoreData>, version?: number, updat
   if (!mergedSettings.notificationEmail) {
     mergedSettings.notificationEmail = "traumflyfishing9@gmail.com";
   }
+  if (!mergedSettings.web3FormsAccessKey) {
+    mergedSettings.web3FormsAccessKey = "fa183ece-13f6-4360-8085-ff84ba3ea870";
+  }
+
+  const normalizedDestinations = (
+    parsed.destinations || initialTraumData.destinations
+  ).map((dest) => {
+    // Fix Río Malleo pin location if still on the old -39.7765 coordinate
+    if (dest.id === "dest-malleo" && Math.abs(dest.lat - -39.7765) < 0.01) {
+      return {
+        ...dest,
+        lat: -39.6225,
+        lng: -71.1865,
+        location: "Parque Nacional Lanín · Ruta Prov. 23, Neuquén",
+        distanceFromJunin:
+          "35 km al norte de Junín de los Andes por RP 60 / RP 23",
+      };
+    }
+    return dest;
+  });
 
   return {
     ...initialTraumData,
@@ -34,6 +54,7 @@ function normalizeStore(parsed: Partial<TraumStoreData>, version?: number, updat
     version: version ?? parsed.version ?? initialTraumData.version ?? 1,
     updatedAt: updatedAt ?? parsed.updatedAt ?? new Date().toISOString(),
     settings: mergedSettings,
+    destinations: normalizedDestinations,
     siteImages: {
       ...initialTraumData.siteImages,
       ...(parsed.siteImages || {}),
