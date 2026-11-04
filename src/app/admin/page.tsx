@@ -136,6 +136,7 @@ export default function AdminDashboardPage() {
     | "services"
     | "reviews"
     | "inquiries"
+    | "legal_cookies"
     | "settings"
   >("departures");
 
@@ -170,13 +171,16 @@ export default function AdminDashboardPage() {
   >("Río");
 
   useEffect(() => {
-    fetch("/api/traum")
-      .then((res) => res.json())
-      .then((data: TraumStoreData) => {
-        setStore(data);
-        setLoading(false);
-      })
-      .catch(() => setLoading(false));
+    const loadStore = () => {
+      fetch("/api/traum", { cache: "no-store" })
+        .then((res) => res.json())
+        .then((data: TraumStoreData) => {
+          setStore(data);
+          setLoading(false);
+        })
+        .catch(() => setLoading(false));
+    };
+    loadStore();
   }, []);
 
   const persistStore = async (updated: TraumStoreData, msg?: string) => {
@@ -190,7 +194,18 @@ export default function AdminDashboardPage() {
       });
       const saved = await res.json();
       setStore(saved);
-      setSaveMessage(msg || "Cambios guardados correctamente");
+      if (typeof BroadcastChannel !== "undefined") {
+        try {
+          const bc = new BroadcastChannel("traum_live_sync");
+          bc.postMessage({ updatedAt: Date.now() });
+          bc.close();
+        } catch {
+          // Ignore
+        }
+      }
+      setSaveMessage(
+        msg || "Cambios guardados en vivo para todos los usuarios"
+      );
       setTimeout(() => setSaveMessage(null), 3500);
     } finally {
       setSaving(false);
@@ -486,7 +501,22 @@ export default function AdminDashboardPage() {
             }`}
           >
             <Inbox className="w-4 h-4" />
-            <span>Solicitudes ({store.inquiries.length})</span>
+            <span>Pedidos ({store.inquiries.length})</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveTab("legal_cookies")}
+            className={`px-4 py-3 text-xs uppercase tracking-[0.18em] font-semibold flex items-center gap-2 transition-colors cursor-pointer ${
+              activeTab === "legal_cookies"
+                ? "bg-[#263D32] text-[#F2EFE6]"
+                : "bg-white text-[#292D29] border border-[#D8CEB9] hover:bg-[#D8CEB9]/40"
+            }`}
+          >
+            <Sliders className="w-4 h-4" />
+            <span>
+              Cookies y Legal ({(store.cookieConsents || []).length})
+            </span>
           </button>
 
           <button
@@ -499,7 +529,7 @@ export default function AdminDashboardPage() {
             }`}
           >
             <Settings className="w-4 h-4" />
-            <span>Contacto</span>
+            <span>Contacto, Mail y Google</span>
           </button>
         </div>
 
@@ -1005,49 +1035,85 @@ export default function AdminDashboardPage() {
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {store.services.map((srv) => (
+                {store.services.map((srv, sIdx) => (
                   <div
                     key={srv.id}
-                    className={`p-5 border flex items-start justify-between gap-4 ${
+                    className={`p-5 border space-y-3 ${
                       srv.enabled
                         ? "bg-[#F2EFE6] border-[#65745A]"
                         : "bg-gray-100 border-gray-300 opacity-60"
                     }`}
                   >
-                    <div className="space-y-1">
-                      <h4 className="font-editorial text-xl text-[#263D32]">
-                        {srv.title}
-                      </h4>
-                      <p className="text-xs text-[#292D29]/80">
-                        {srv.description}
-                      </p>
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="space-y-1">
+                        <h4 className="font-editorial text-xl text-[#263D32]">
+                          {srv.title}
+                        </h4>
+                        <p className="text-xs text-[#292D29]/80">
+                          {srv.description}
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => handleToggleService(srv.id)}
+                        className={`px-3 py-1.5 text-[10px] uppercase tracking-wider font-semibold cursor-pointer ${
+                          srv.enabled
+                            ? "bg-[#263D32] text-[#F2EFE6]"
+                            : "bg-[#D8CEB9] text-[#292D29]"
+                        }`}
+                      >
+                        {srv.enabled ? "Activo" : "Inactivo"}
+                      </button>
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => handleToggleService(srv.id)}
-                      className={`px-3 py-1.5 text-[10px] uppercase tracking-wider font-semibold cursor-pointer ${
-                        srv.enabled
-                          ? "bg-[#263D32] text-[#F2EFE6]"
-                          : "bg-[#D8CEB9] text-[#292D29]"
-                      }`}
-                    >
-                      {srv.enabled ? "Activo" : "Inactivo"}
-                    </button>
+
+                    <div className="pt-2 border-t border-[#D8CEB9]">
+                      <label className="block text-[10px] uppercase tracking-[0.18em] text-[#746657] font-semibold mb-1">
+                        Etiqueta de Tarifa / Condición Comercial
+                      </label>
+                      <input
+                        type="text"
+                        value={srv.priceLabel || ""}
+                        onChange={(e) => {
+                          const nextSrv = [...store.services];
+                          nextSrv[sIdx] = {
+                            ...srv,
+                            priceLabel: e.target.value,
+                          };
+                          setStore({ ...store, services: nextSrv });
+                        }}
+                        placeholder="Ej. Jornada guiada · Seña del 30%"
+                        className="w-full px-3 py-2 bg-white border border-[#D8CEB9] text-xs"
+                      />
+                    </div>
                   </div>
                 ))}
               </div>
+              <div className="pt-2 flex justify-end">
+                <button
+                  type="button"
+                  onClick={() =>
+                    persistStore(store, "Prestaciones y tarifas actualizadas")
+                  }
+                  className="px-5 py-2.5 bg-[#263D32] text-[#F2EFE6] text-xs uppercase tracking-wider font-semibold inline-flex items-center gap-2 cursor-pointer"
+                >
+                  <Save className="w-3.5 h-3.5" />
+                  <span>Guardar prestaciones</span>
+                </button>
+              </div>
             </div>
 
-            {/* Payment Methods Configuration */}
+            {/* Payment Methods Configuration (Without CBU) */}
             <div className="bg-white border border-[#D8CEB9] p-6 sm:p-8 space-y-6">
               <div className="flex items-center justify-between pb-4 border-b border-[#D8CEB9]">
                 <div>
                   <h3 className="font-editorial text-2xl text-[#263D32]">
-                    Configuración de Medios de Pago y Señas
+                    Configuración de Medios de Pago y Señas (Ocultos hasta Contratar)
                   </h3>
                   <p className="text-xs text-[#746657]">
-                    Configurá el Alias/CBU, porcentaje de seña y links de pago
-                    que aparecen en la sección de Servicios.
+                    En la web pública sólo se muestra con qué medios se puede
+                    pagar y el porcentaje de seña. El Alias y Titular se
+                    muestran recién en el Paso 2 cuando el cliente contrata un
+                    servicio (sin CBU).
                   </p>
                 </div>
                 <button
@@ -1076,7 +1142,7 @@ export default function AdminDashboardPage() {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-[10px] uppercase tracking-[0.2em] font-semibold mb-1">
-                    Banco / Entidad
+                    Banco / Entidad (Visible sólo al contratar)
                   </label>
                   <input
                     type="text"
@@ -1095,7 +1161,7 @@ export default function AdminDashboardPage() {
                 </div>
                 <div>
                   <label className="block text-[10px] uppercase tracking-[0.2em] font-semibold mb-1">
-                    Titular de la cuenta
+                    Titular de la cuenta (Visible sólo al contratar)
                   </label>
                   <input
                     type="text"
@@ -1114,7 +1180,7 @@ export default function AdminDashboardPage() {
                 </div>
                 <div>
                   <label className="block text-[10px] uppercase tracking-[0.2em] font-semibold mb-1">
-                    Alias Bancario / Billetera
+                    Alias Bancario / Billetera (Visible sólo al contratar)
                   </label>
                   <input
                     type="text"
@@ -1133,30 +1199,11 @@ export default function AdminDashboardPage() {
                 </div>
                 <div>
                   <label className="block text-[10px] uppercase tracking-[0.2em] font-semibold mb-1">
-                    CBU / CVU
-                  </label>
-                  <input
-                    type="text"
-                    value={store.paymentConfig.bankCbu}
-                    onChange={(e) =>
-                      setStore({
-                        ...store,
-                        paymentConfig: {
-                          ...store.paymentConfig,
-                          bankCbu: e.target.value,
-                        },
-                      })
-                    }
-                    className="w-full px-3.5 py-2.5 border border-[#D8CEB9] text-sm"
-                  />
-                </div>
-                <div>
-                  <label className="block text-[10px] uppercase tracking-[0.2em] font-semibold mb-1">
                     Porcentaje de Seña (%)
                   </label>
                   <input
                     type="number"
-                    min={10}
+                    min={5}
                     max={100}
                     value={store.paymentConfig.depositPercentage}
                     onChange={(e) =>
@@ -1173,7 +1220,7 @@ export default function AdminDashboardPage() {
                 </div>
                 <div>
                   <label className="block text-[10px] uppercase tracking-[0.2em] font-semibold mb-1">
-                    Link de Pago Mercado Pago (Opcional)
+                    Link de Pago Mercado Pago (Opcional · Paso 2)
                   </label>
                   <input
                     type="url"
@@ -1191,38 +1238,37 @@ export default function AdminDashboardPage() {
                     className="w-full px-3.5 py-2.5 border border-[#D8CEB9] text-sm"
                   />
                 </div>
-              </div>
-
-              <div>
-                <label className="block text-[10px] uppercase tracking-[0.2em] font-semibold mb-1">
-                  Link de Pago Internacional PayPal / Stripe (Opcional)
-                </label>
-                <input
-                  type="url"
-                  placeholder="https://paypal.me/..."
-                  value={store.paymentConfig.internationalPaymentLink}
-                  onChange={(e) =>
-                    setStore({
-                      ...store,
-                      paymentConfig: {
-                        ...store.paymentConfig,
-                        internationalPaymentLink: e.target.value,
-                      },
-                    })
-                  }
-                  className="w-full px-3.5 py-2.5 border border-[#D8CEB9] text-sm"
-                />
+                <div>
+                  <label className="block text-[10px] uppercase tracking-[0.2em] font-semibold mb-1">
+                    Link de Pago Internacional PayPal / Stripe (Opcional · Paso 2)
+                  </label>
+                  <input
+                    type="url"
+                    placeholder="https://paypal.me/..."
+                    value={store.paymentConfig.internationalPaymentLink}
+                    onChange={(e) =>
+                      setStore({
+                        ...store,
+                        paymentConfig: {
+                          ...store.paymentConfig,
+                          internationalPaymentLink: e.target.value,
+                        },
+                      })
+                    }
+                    className="w-full px-3.5 py-2.5 border border-[#D8CEB9] text-sm"
+                  />
+                </div>
               </div>
 
               <button
                 type="button"
                 onClick={() =>
-                  persistStore(store, "Medios de pago actualizados")
+                  persistStore(store, "Medios de pago y seña actualizados en vivo")
                 }
                 className="px-6 py-3 bg-[#263D32] text-[#F2EFE6] hover:bg-[#65745A] text-xs uppercase tracking-[0.2em] font-semibold inline-flex items-center gap-2 cursor-pointer"
               >
                 <Save className="w-4 h-4" />
-                <span>Guardar medios de pago</span>
+                <span>Guardar medios de pago y seña</span>
               </button>
             </div>
           </div>
@@ -1289,11 +1335,11 @@ export default function AdminDashboardPage() {
           <div className="space-y-6">
             <div className="bg-white border border-[#D8CEB9] p-6">
               <h3 className="font-editorial text-2xl text-[#263D32] mb-1">
-                Solicitudes de Reserva Recibidas
+                Pedidos y Contrataciones Recibidas
               </h3>
               <p className="text-xs text-[#746657]">
-                Todas las consultas enviadas desde el calendario o el formulario
-                de contacto quedan registradas aquí.
+                Todas las contrataciones se guardan en tiempo real en el servidor y se notifican automáticamente por correo a{" "}
+                <strong>{store.settings.notificationEmail || "traumflyfishing9@gmail.com"}</strong>.
               </p>
             </div>
 
@@ -1310,11 +1356,16 @@ export default function AdminDashboardPage() {
                   >
                     <div className="space-y-2">
                       <div className="flex flex-wrap items-center gap-2">
+                        {inq.bookingCode && (
+                          <span className="px-2.5 py-1 bg-[#B35B2B] text-[#F2EFE6] text-xs font-mono font-semibold">
+                            {inq.bookingCode}
+                          </span>
+                        )}
                         <span className="px-2.5 py-1 bg-[#263D32] text-[#F2EFE6] text-xs font-medium">
                           Fecha deseada: {inq.desiredDate}
                         </span>
                         <span className="px-2.5 py-1 bg-[#D8CEB9]/60 text-[#263D32] text-xs font-medium">
-                          {inq.experienceType} ({inq.serviceGroupType})
+                          {inq.selectedServiceTitle || inq.experienceType} ({inq.serviceGroupType})
                         </span>
                         <span className="text-xs text-[#746657]">
                           Nivel: {inq.skillLevel} · {inq.participantsCount}{" "}
@@ -1330,8 +1381,21 @@ export default function AdminDashboardPage() {
                         <span>
                           <strong>Email:</strong> {inq.email}
                         </span>
+                        {inq.googleEmail && (
+                          <span className="text-[#263D32]">
+                            <strong>Cuenta Google:</strong> {inq.googleEmail}
+                          </span>
+                        )}
                         <span>
                           <strong>WhatsApp:</strong> {inq.whatsapp}
+                        </span>
+                        <span>
+                          <strong>Legal:</strong>{" "}
+                          {inq.legalAccepted ? "Aceptado" : "Pendiente"} (
+                          {inq.legalAcceptedAt
+                            ? new Date(inq.legalAcceptedAt).toLocaleString("es-AR")
+                            : inq.createdAt}
+                          )
                         </span>
                       </div>
 
@@ -1349,7 +1413,8 @@ export default function AdminDashboardPage() {
                           const newStatus = e.target.value as
                             | "Pendiente"
                             | "Contactado"
-                            | "Confirmado";
+                            | "Confirmado"
+                            | "Cancelado";
                           const updated: TraumStoreData = {
                             ...store,
                             inquiries: store.inquiries.map((item) =>
@@ -1365,6 +1430,7 @@ export default function AdminDashboardPage() {
                         <option value="Pendiente">Pendiente</option>
                         <option value="Contactado">Contactado</option>
                         <option value="Confirmado">Confirmado</option>
+                        <option value="Cancelado">Cancelado</option>
                       </select>
                     </div>
                   </div>
@@ -1374,72 +1440,214 @@ export default function AdminDashboardPage() {
           </div>
         )}
 
+        {/* TAB: COOKIES & LEGAL RECORDS */}
+        {activeTab === "legal_cookies" && (
+          <div className="space-y-8">
+            {/* Solicitudes de Botón de Arrepentimiento */}
+            <div className="bg-white border border-[#D8CEB9] p-6 sm:p-8">
+              <h3 className="font-editorial text-2xl text-[#263D32] mb-1">
+                Solicitudes de Arrepentimiento / Cancelación (Ley 24.240)
+              </h3>
+              <p className="text-xs text-[#746657] mb-6">
+                Registro oficial de solicitudes ingresadas desde el Botón de Arrepentimiento (/arrepentimiento).
+              </p>
+
+              {!store.regretRequests || store.regretRequests.length === 0 ? (
+                <p className="text-xs text-[#746657] py-6 text-center bg-[#F2EFE6]/60 border border-[#D8CEB9]">
+                  No se registran solicitudes de revocación o arrepentimiento.
+                </p>
+              ) : (
+                <div className="space-y-3">
+                  {store.regretRequests.map((req) => (
+                    <div
+                      key={req.id}
+                      className="p-4 border border-[#D8CEB9] bg-[#F2EFE6]/40 flex flex-col sm:flex-row sm:items-center justify-between gap-3"
+                    >
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-2">
+                          <span className="px-2 py-0.5 bg-[#B35B2B] text-white text-[10px] font-mono">
+                            Trámite: {req.regretCode}
+                          </span>
+                          <span className="text-xs font-semibold text-[#263D32]">
+                            {req.fullName} ({req.email})
+                          </span>
+                        </div>
+                        <p className="text-xs text-[#746657]">
+                          Servicio/Reserva: <strong>{req.serviceContracted}</strong>{" "}
+                          {req.bookingCode ? `(${req.bookingCode})` : ""} · WhatsApp: {req.whatsapp}
+                        </p>
+                        {req.reason && (
+                          <p className="text-xs text-[#292D29]/80 italic">
+                            Motivo: “{req.reason}”
+                          </p>
+                        )}
+                      </div>
+                      <span className="text-[11px] text-[#746657]">
+                        {new Date(req.createdAt).toLocaleString("es-AR")}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Registro de Cookies en Servidor */}
+            <div className="bg-white border border-[#D8CEB9] p-6 sm:p-8">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-4 pb-3 border-b border-[#D8CEB9]">
+                <div>
+                  <h3 className="font-editorial text-2xl text-[#263D32]">
+                    Consentimientos de Cookies Guardados en el Servidor
+                  </h3>
+                  <p className="text-xs text-[#746657]">
+                    Cada decisión de cookies de los visitantes se almacena en la base de datos en vivo (Ley 25.326).
+                  </p>
+                </div>
+                <span className="px-3 py-1 bg-[#263D32] text-[#F2EFE6] text-xs font-semibold">
+                  Total registrados: {(store.cookieConsents || []).length}
+                </span>
+              </div>
+
+              {!store.cookieConsents || store.cookieConsents.length === 0 ? (
+                <p className="text-xs text-[#746657] py-6 text-center bg-[#F2EFE6]/60 border border-[#D8CEB9]">
+                  Aún no hay registros de cookies almacenados.
+                </p>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left border-collapse text-xs">
+                    <thead>
+                      <tr className="border-b border-[#D8CEB9] text-[10px] uppercase tracking-wider text-[#746657]">
+                        <th className="py-2.5 pr-4">Fecha / Hora</th>
+                        <th className="py-2.5 pr-4">Visitante ID</th>
+                        <th className="py-2.5 pr-4">Decisión</th>
+                        <th className="py-2.5 pr-4">Preferencias</th>
+                        <th className="py-2.5 pr-4">Cuenta Google</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-[#D8CEB9]/60">
+                      {store.cookieConsents.slice(0, 50).map((item) => (
+                        <tr key={item.id}>
+                          <td className="py-2.5 pr-4 whitespace-nowrap">
+                            {new Date(item.createdAt).toLocaleString("es-AR")}
+                          </td>
+                          <td className="py-2.5 pr-4 font-mono text-[11px] text-[#263D32]">
+                            {item.visitorId}
+                          </td>
+                          <td className="py-2.5 pr-4">
+                            <span
+                              className={`px-2 py-0.5 text-[10px] uppercase font-semibold ${
+                                item.decision === "accepted"
+                                  ? "bg-[#263D32]/15 text-[#263D32]"
+                                  : "bg-[#B35B2B]/15 text-[#B35B2B]"
+                              }`}
+                            >
+                              {item.decision === "accepted" ? "Aceptadas" : item.decision === "custom" ? "Personalizadas" : "Solo Esenciales"}
+                            </span>
+                          </td>
+                          <td className="py-2.5 pr-4 text-[11px] text-[#746657]">
+                            Esenciales: Sí · Google: {item.preferences?.googleAuth ? "Sí" : "No"} · Pagos: {item.preferences?.payments ? "Sí" : "No"} · Analíticas: {item.preferences?.analytics ? "Sí" : "No"}
+                          </td>
+                          <td className="py-2.5 pr-4 font-mono text-[11px] text-[#746657]">
+                            {item.googleEmail || "Visitante anónimo"}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
         {/* TAB: SETTINGS & CONTACT */}
         {activeTab === "settings" && (
-          <div className="bg-white border border-[#D8CEB9] p-6 sm:p-8 max-w-2xl space-y-6">
+          <div className="bg-white border border-[#D8CEB9] p-6 sm:p-8 max-w-3xl space-y-6">
             <h3 className="font-editorial text-2xl text-[#263D32] pb-3 border-b border-[#D8CEB9]">
-              Datos de Contacto y Configuración General
+              Datos de Contacto, Correo de Pedidos y Blindaje Legal
             </h3>
 
             <div className="space-y-4">
-              <div>
-                <label className="block text-[10px] uppercase tracking-[0.2em] font-semibold mb-1">
-                  Ubicación general de operación
-                </label>
-                <input
-                  type="text"
-                  value={store.settings.locationGeneral}
-                  onChange={(e) =>
-                    setStore({
-                      ...store,
-                      settings: {
-                        ...store.settings,
-                        locationGeneral: e.target.value,
-                      },
-                    })
-                  }
-                  className="w-full px-3.5 py-2.5 border border-[#D8CEB9] text-sm"
-                />
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-[10px] uppercase tracking-[0.2em] font-semibold mb-1">
+                    Correo electrónico público
+                  </label>
+                  <input
+                    type="email"
+                    value={store.settings.email}
+                    onChange={(e) =>
+                      setStore({
+                        ...store,
+                        settings: {
+                          ...store.settings,
+                          email: e.target.value,
+                        },
+                      })
+                    }
+                    className="w-full px-3.5 py-2.5 border border-[#D8CEB9] text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] uppercase tracking-[0.2em] font-semibold mb-1">
+                    Correo receptor de pedidos (Admin)
+                  </label>
+                  <input
+                    type="email"
+                    value={store.settings.notificationEmail || "traumflyfishing9@gmail.com"}
+                    onChange={(e) =>
+                      setStore({
+                        ...store,
+                        settings: {
+                          ...store.settings,
+                          notificationEmail: e.target.value,
+                        },
+                      })
+                    }
+                    className="w-full px-3.5 py-2.5 border border-[#D8CEB9] text-sm font-medium text-[#263D32]"
+                  />
+                </div>
               </div>
 
-              <div>
-                <label className="block text-[10px] uppercase tracking-[0.2em] font-semibold mb-1">
-                  Número de WhatsApp
-                </label>
-                <input
-                  type="text"
-                  value={store.settings.whatsappNumber}
-                  onChange={(e) =>
-                    setStore({
-                      ...store,
-                      settings: {
-                        ...store.settings,
-                        whatsappNumber: e.target.value,
-                      },
-                    })
-                  }
-                  className="w-full px-3.5 py-2.5 border border-[#D8CEB9] text-sm"
-                />
-              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-[10px] uppercase tracking-[0.2em] font-semibold mb-1">
+                    Ubicación general de operación
+                  </label>
+                  <input
+                    type="text"
+                    value={store.settings.locationGeneral}
+                    onChange={(e) =>
+                      setStore({
+                        ...store,
+                        settings: {
+                          ...store.settings,
+                          locationGeneral: e.target.value,
+                        },
+                      })
+                    }
+                    className="w-full px-3.5 py-2.5 border border-[#D8CEB9] text-sm"
+                  />
+                </div>
 
-              <div>
-                <label className="block text-[10px] uppercase tracking-[0.2em] font-semibold mb-1">
-                  Correo electrónico oficial
-                </label>
-                <input
-                  type="email"
-                  value={store.settings.email}
-                  onChange={(e) =>
-                    setStore({
-                      ...store,
-                      settings: {
-                        ...store.settings,
-                        email: e.target.value,
-                      },
-                    })
-                  }
-                  className="w-full px-3.5 py-2.5 border border-[#D8CEB9] text-sm"
-                />
+                <div>
+                  <label className="block text-[10px] uppercase tracking-[0.2em] font-semibold mb-1">
+                    Número de WhatsApp
+                  </label>
+                  <input
+                    type="text"
+                    value={store.settings.whatsappNumber}
+                    onChange={(e) =>
+                      setStore({
+                        ...store,
+                        settings: {
+                          ...store.settings,
+                          whatsappNumber: e.target.value,
+                        },
+                      })
+                    }
+                    className="w-full px-3.5 py-2.5 border border-[#D8CEB9] text-sm"
+                  />
+                </div>
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -1483,10 +1691,167 @@ export default function AdminDashboardPage() {
                 </div>
               </div>
 
+              {/* Datos Legales y Fiscales */}
+              <div className="pt-4 border-t border-[#D8CEB9] space-y-4">
+                <h4 className="font-editorial text-xl text-[#263D32]">
+                  Titularidad Legal y Habilitación Comercial
+                </h4>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-[10px] uppercase tracking-[0.2em] font-semibold mb-1">
+                      Titular / Razón Social
+                    </label>
+                    <input
+                      type="text"
+                      value={store.settings.legalOwnerName || ""}
+                      onChange={(e) =>
+                        setStore({
+                          ...store,
+                          settings: {
+                            ...store.settings,
+                            legalOwnerName: e.target.value,
+                          },
+                        })
+                      }
+                      className="w-full px-3.5 py-2.5 border border-[#D8CEB9] text-sm"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] uppercase tracking-[0.2em] font-semibold mb-1">
+                      CUIT / Identificación Fiscal
+                    </label>
+                    <input
+                      type="text"
+                      value={store.settings.legalTaxId || ""}
+                      onChange={(e) =>
+                        setStore({
+                          ...store,
+                          settings: {
+                            ...store.settings,
+                            legalTaxId: e.target.value,
+                          },
+                        })
+                      }
+                      className="w-full px-3.5 py-2.5 border border-[#D8CEB9] text-sm"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] uppercase tracking-[0.2em] font-semibold mb-1">
+                      Matrícula / Habilitación Guía de Pesca
+                    </label>
+                    <input
+                      type="text"
+                      value={store.settings.guideLicenseNumber || ""}
+                      onChange={(e) =>
+                        setStore({
+                          ...store,
+                          settings: {
+                            ...store.settings,
+                            guideLicenseNumber: e.target.value,
+                          },
+                        })
+                      }
+                      className="w-full px-3.5 py-2.5 border border-[#D8CEB9] text-sm"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] uppercase tracking-[0.2em] font-semibold mb-1">
+                      Domicilio Legal y Jurisdicción
+                    </label>
+                    <input
+                      type="text"
+                      value={store.settings.legalAddress || ""}
+                      onChange={(e) =>
+                        setStore({
+                          ...store,
+                          settings: {
+                            ...store.settings,
+                            legalAddress: e.target.value,
+                          },
+                        })
+                      }
+                      className="w-full px-3.5 py-2.5 border border-[#D8CEB9] text-sm"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Configuración Opcional de Google OAuth y SMTP Directo */}
+              <div className="pt-4 border-t border-[#D8CEB9] space-y-4">
+                <h4 className="font-editorial text-xl text-[#263D32]">
+                  Integración Google y Correo SMTP (Opcional)
+                </h4>
+                <p className="text-xs text-[#746657]">
+                  El envío a <strong>traumflyfishing9@gmail.com</strong> ya está activo por defecto. Si además deseas configurar una contraseña de aplicación de Gmail o un Client ID propio de Google Cloud, puedes ingresarlos aquí:
+                </p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="sm:col-span-2">
+                    <label className="block text-[10px] uppercase tracking-[0.2em] font-semibold mb-1">
+                      Google OAuth Client ID (Opcional)
+                    </label>
+                    <input
+                      type="text"
+                      value={store.settings.googleClientId || ""}
+                      onChange={(e) =>
+                        setStore({
+                          ...store,
+                          settings: {
+                            ...store.settings,
+                            googleClientId: e.target.value,
+                          },
+                        })
+                      }
+                      placeholder="Ej. 1234567890-abc.apps.googleusercontent.com"
+                      className="w-full px-3.5 py-2.5 border border-[#D8CEB9] text-sm font-mono"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] uppercase tracking-[0.2em] font-semibold mb-1">
+                      Usuario Gmail SMTP (Opcional)
+                    </label>
+                    <input
+                      type="email"
+                      value={store.settings.smtpUser || ""}
+                      onChange={(e) =>
+                        setStore({
+                          ...store,
+                          settings: {
+                            ...store.settings,
+                            smtpUser: e.target.value,
+                          },
+                        })
+                      }
+                      placeholder="traumflyfishing9@gmail.com"
+                      className="w-full px-3.5 py-2.5 border border-[#D8CEB9] text-sm"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] uppercase tracking-[0.2em] font-semibold mb-1">
+                      Contraseña de Aplicación Gmail (App Password)
+                    </label>
+                    <input
+                      type="password"
+                      value={store.settings.smtpAppPassword || ""}
+                      onChange={(e) =>
+                        setStore({
+                          ...store,
+                          settings: {
+                            ...store.settings,
+                            smtpAppPassword: e.target.value,
+                          },
+                        })
+                      }
+                      placeholder="xxxx xxxx xxxx xxxx"
+                      className="w-full px-3.5 py-2.5 border border-[#D8CEB9] text-sm"
+                    />
+                  </div>
+                </div>
+              </div>
+
               <button
                 type="button"
                 onClick={() =>
-                  persistStore(store, "Datos de contacto actualizados")
+                  persistStore(store, "Configuración general y legal actualizada")
                 }
                 className="px-6 py-3 bg-[#263D32] text-[#F2EFE6] hover:bg-[#65745A] text-xs uppercase tracking-[0.2em] font-semibold inline-flex items-center gap-2 cursor-pointer"
               >

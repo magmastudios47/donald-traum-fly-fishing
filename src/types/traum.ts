@@ -21,6 +21,7 @@ export interface ExperienceItem {
   highlights: string[];
   durationPlaceholder: string;
   capacityPlaceholder: string;
+  priceLabel?: string;
   paymentLink?: string;
 }
 
@@ -45,6 +46,8 @@ export interface ServiceFeatureItem {
   iconName: string;
   enabled: boolean;
   note?: string;
+  priceLabel?: string;
+  paymentLink?: string;
 }
 
 export interface PaymentConfig {
@@ -55,7 +58,7 @@ export interface PaymentConfig {
   acceptedMethods: string[];
   bankName: string;
   bankAlias: string;
-  bankCbu: string;
+  bankCbu?: string;
   bankHolder: string;
   mercadoPagoLink: string;
   internationalPaymentLink: string;
@@ -65,6 +68,9 @@ export interface PaymentConfig {
 export interface ReviewItem {
   id: string;
   authorName: string;
+  authorEmail?: string;
+  authorAvatar?: string;
+  verifiedGoogle?: boolean;
   authorLocation: string;
   experienceModality: string;
   rating: number; // 1 to 5
@@ -93,16 +99,22 @@ export interface CalendarDeparture {
   duration: string;
   additionalInfo: string;
   isDemo?: boolean;
+  priceLabel?: string;
   paymentLink?: string;
 }
 
 export interface BookingInquiry {
   id: string;
+  bookingCode: string;
   createdAt: string;
   fullName: string;
   email: string;
+  googleEmail?: string;
   whatsapp: string;
   desiredDate: string;
+  selectedServiceTitle?: string;
+  priceReference?: string;
+  depositPercentage?: number;
   experienceType: string;
   serviceGroupType: string;
   participantsCount: number;
@@ -111,7 +123,42 @@ export interface BookingInquiry {
     | "Intermedio"
     | "Avanzado / Experimentado";
   comments: string;
-  status: "Pendiente" | "Contactado" | "Confirmado";
+  legalAccepted: boolean;
+  legalAcceptedAt: string;
+  legalVersion: string;
+  emailNotificationSent?: boolean;
+  status: "Pendiente" | "Contactado" | "Confirmado" | "Cancelado";
+}
+
+export interface CookieConsentPreferences {
+  essential: boolean;
+  googleAuth: boolean;
+  payments: boolean;
+  analytics: boolean;
+}
+
+export interface CookieConsentRecord {
+  id: string;
+  visitorId: string;
+  decision: "accepted" | "rejected" | "custom";
+  preferences: CookieConsentPreferences;
+  googleEmail?: string;
+  userAgent?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface RegretRequestItem {
+  id: string;
+  regretCode: string;
+  createdAt: string;
+  fullName: string;
+  email: string;
+  whatsapp: string;
+  bookingCode?: string;
+  serviceContracted: string;
+  reason: string;
+  status: "Recibido" | "En gestión" | "Resuelto";
 }
 
 export interface SiteSettings {
@@ -122,14 +169,27 @@ export interface SiteSettings {
   locationGeneral: string;
   whatsappNumber: string;
   email: string;
+  notificationEmail: string;
   instagramHandle: string;
   instagramUrl: string;
   showDemoDepartures: boolean;
   showReferenceNoticeOnDestinations: boolean;
   adminPin: string;
+  // Datos legales y comerciales editables
+  legalOwnerName: string;
+  legalTaxId: string;
+  legalAddress: string;
+  guideLicenseNumber: string;
+  // Integraciones opcionales Google OAuth & SMTP/API de correo
+  googleClientId?: string;
+  smtpUser?: string;
+  smtpAppPassword?: string;
+  resendApiKey?: string;
 }
 
 export interface TraumStoreData {
+  version?: number;
+  updatedAt?: string;
   settings: SiteSettings;
   siteImages: SiteImagesConfig;
   paymentConfig: PaymentConfig;
@@ -139,4 +199,14 @@ export interface TraumStoreData {
   departures: CalendarDeparture[];
   reviews: ReviewItem[];
   inquiries: BookingInquiry[];
+  cookieConsents?: CookieConsentRecord[];
+  regretRequests?: RegretRequestItem[];
+}
+
+export interface GoogleUserSession {
+  name: string;
+  email: string;
+  picture?: string;
+  sub?: string;
+  verifiedAt: string;
 }

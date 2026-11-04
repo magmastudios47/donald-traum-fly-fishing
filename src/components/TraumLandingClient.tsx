@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { TraumStoreData } from "@/types/traum";
 import Navbar from "@/components/Navbar";
 import HeroSection from "@/components/HeroSection";
@@ -24,47 +24,120 @@ interface TraumLandingClientProps {
 export default function TraumLandingClient({
   initialData,
 }: TraumLandingClientProps) {
+  const [store, setStore] = useState<TraumStoreData>(initialData);
   const [bookingModalOpen, setBookingModalOpen] = useState(false);
   const [bookingPrefill, setBookingPrefill] = useState<{
     date?: string;
     experienceType?: string;
     serviceGroupType?: string;
     destination?: string;
+    selectedServiceTitle?: string;
+    priceReference?: string;
+    paymentLink?: string;
   } | null>(null);
+
+  const syncLiveStore = useCallback(async () => {
+    try {
+      const res = await fetch("/api/traum", { cache: "no-store" });
+      if (!res.ok) return;
+      const latest: TraumStoreData = await res.json();
+      setStore((prev) => {
+        if (
+          latest.version !== prev.version ||
+          latest.updatedAt !== prev.updatedAt ||
+          latest.reviews.length !== prev.reviews.length ||
+          latest.departures.length !== prev.departures.length
+        ) {
+          return latest;
+        }
+        return prev;
+      });
+    } catch {
+      // Keep current store if offline
+    }
+  }, []);
+
+  // Real-time live synchronization for all visitors
+  useEffect(() => {
+    syncLiveStore();
+    const interval = setInterval(syncLiveStore, 4000);
+
+    const handleVisibility = () => {
+      if (document.visibilityState === "visible") {
+        syncLiveStore();
+      }
+    };
+    window.addEventListener("focus", syncLiveStore);
+    document.addEventListener("visibilitychange", handleVisibility);
+
+    let bc: BroadcastChannel | null = null;
+    if (typeof BroadcastChannel !== "undefined") {
+      bc = new BroadcastChannel("traum_live_sync");
+      bc.onmessage = () => {
+        syncLiveStore();
+      };
+    }
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener("focus", syncLiveStore);
+      document.removeEventListener("visibilitychange", handleVisibility);
+      if (bc) bc.close();
+    };
+  }, [syncLiveStore]);
 
   const handleOpenBookingModal = (prefill?: {
     date?: string;
     experienceType?: string;
     serviceGroupType?: string;
     destination?: string;
+    selectedServiceTitle?: string;
+    priceReference?: string;
+    paymentLink?: string;
   }) => {
     setBookingPrefill(prefill || null);
     setBookingModalOpen(true);
   };
 
+  const notifyLiveChange = () => {
+    syncLiveStore();
+    if (typeof BroadcastChannel !== "undefined") {
+      try {
+        const bc = new BroadcastChannel("traum_live_sync");
+        bc.postMessage({ updatedAt: Date.now() });
+        bc.close();
+      } catch {
+        // Ignore
+      }
+    }
+  };
+
   return (
     <div className="min-h-screen flex flex-col bg-[#F2EFE6] text-[#292D29]">
-      {/* A. NAVBAR (Only TRAUM / Fly Cast Patagonia + 3-line Menu) */}
+      {/* A. NAVBAR */}
       <Navbar onOpenBookingModal={handleOpenBookingModal} />
 
       <main className="flex-1">
         {/* B. HERO SECTION */}
         <HeroSection
-          heroBgUrl={initialData.siteImages.heroBg}
+          heroBgUrl={store.siteImages.heroBg}
           onOpenBookingModal={() => handleOpenBookingModal()}
         />
 
         {/* C. FILOSOFÍA — EL SIGNIFICADO DE TRAUM */}
         <RevealSection>
-          <PhilosophySection siteImages={initialData.siteImages} />
+          <PhilosophySection siteImages={store.siteImages} />
         </RevealSection>
 
         {/* D. EXPERIENCIAS — EL CORAZÓN DE TRAUM */}
         <RevealSection>
           <ExperiencesSection
-            experiences={initialData.experiences}
+            experiences={store.experiences}
             onSelectExperienceForBooking={(modality) =>
-              handleOpenBookingModal({ experienceType: modality })
+              handleOpenBookingModal({
+                experienceType: modality,
+                selectedServiceTitle: modality,
+              })
             }
           />
         </RevealSection>
@@ -72,18 +145,28 @@ export default function TraumLandingClient({
         {/* E. DESTINOS + MAPA DE PESCA REFERENCIADO A JUNÍN DE LOS ANDES */}
         <RevealSection>
           <DestinationsSection
-            destinations={initialData.destinations}
+            destinations={store.destinations}
             onSelectDestinationForBooking={(destinationName) =>
-              handleOpenBookingModal({ destination: destinationName })
+              handleOpenBookingModal({
+                destination: destinationName,
+                selectedServiceTitle: `Salida en ${destinationName}`,
+              })
             }
           />
         </RevealSection>
 
-        {/* G. SERVICIOS + MEDIOS DE PAGO */}
+        {/* G. SERVICIOS + MEDIOS DE PAGO (DATOS BANCARIOS OCULTOS HASTA CONTRATAR) */}
         <RevealSection>
           <ServicesSection
-            services={initialData.services}
-            paymentConfig={initialData.paymentConfig}
+            services={store.services}
+            paymentConfig={store.paymentConfig}
+            onContractService={(srv) =>
+              handleOpenBookingModal({
+                selectedServiceTitle: srv.title,
+                priceReference: srv.priceLabel || srv.note,
+                paymentLink: srv.paymentLink,
+              })
+            }
             onOpenBookingModal={() => handleOpenBookingModal()}
           />
         </RevealSection>
@@ -91,44 +174,61 @@ export default function TraumLandingClient({
         {/* F. CALENDARIO DE SALIDAS Y RESERVAS */}
         <RevealSection>
           <CalendarSection
-            departures={initialData.departures}
+            departures={store.departures}
             onRequestBookingFromCalendar={(prefill) =>
-              handleOpenBookingModal(prefill)
+              handleOpenBookingModal({
+                ...prefill,
+                selectedServiceTitle: prefill.destination
+                  ? `Salida ${prefill.date} — ${prefill.destination}`
+                  : prefill.experienceType,
+              })
             }
           />
         </RevealSection>
 
-        {/* RESEÑAS DE PESCADORES */}
+        {/* RESEÑAS DE PESCADORES (CON GOOGLE OBLIGATORIO) */}
         <RevealSection>
-          <ReviewsSection initialReviews={initialData.reviews} />
+          <ReviewsSection
+            initialReviews={store.reviews}
+            googleClientId={store.settings.googleClientId}
+            onReviewCreated={notifyLiveChange}
+          />
         </RevealSection>
 
         {/* H & I. PESCA RESPONSABLE + FRASE EDITORIAL THOREAU */}
         <RevealSection>
-          <ConservationSection siteImages={initialData.siteImages} />
+          <ConservationSection siteImages={store.siteImages} />
         </RevealSection>
 
         {/* J. CONTACTO Y RESERVAS */}
         <RevealSection>
           <ContactSection
-            settings={initialData.settings}
+            settings={store.settings}
+            paymentConfig={store.paymentConfig}
+            experiences={store.experiences}
+            services={store.services}
             prefillData={bookingPrefill}
+            onInquirySubmitted={notifyLiveChange}
           />
         </RevealSection>
       </main>
 
       {/* K. FOOTER */}
-      <Footer settings={initialData.settings} />
+      <Footer settings={store.settings} />
 
-      {/* BOOKING MODAL */}
+      {/* BOOKING MODAL (PASO 1 DATOS + LEGAL -> PASO 2 SEÑA Y ALIAS SIN CBU) */}
       <BookingModal
         isOpen={bookingModalOpen}
         onClose={() => setBookingModalOpen(false)}
-        settings={initialData.settings}
+        settings={store.settings}
+        paymentConfig={store.paymentConfig}
+        experiences={store.experiences}
+        services={store.services}
         prefillData={bookingPrefill}
+        onBookingCreated={notifyLiveChange}
       />
 
-      {/* COOKIE CONSENT POPUP ON ENTRY */}
+      {/* COOKIE CONSENT POPUP ON ENTRY (PERSISTED IN SERVER DB) */}
       <CookieConsentModal />
     </div>
   );

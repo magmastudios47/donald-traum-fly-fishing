@@ -1,6 +1,8 @@
 import { TraumStoreData } from "@/types/traum";
 
 export const initialTraumData: TraumStoreData = {
+  version: 1,
+  updatedAt: "2026-11-04T14:00:00.000Z",
   settings: {
     brandName: "TRAUM",
     brandSubtitle: "FLY CAST PATAGONIA",
@@ -9,12 +11,21 @@ export const initialTraumData: TraumStoreData = {
     locationGeneral:
       "Junín de los Andes, Provincia del Neuquén — Patagonia Argentina",
     whatsappNumber: "+54 9 2972 40-0000",
-    email: "contacto@traumflycast.com",
+    email: "traumflyfishing9@gmail.com",
+    notificationEmail: "traumflyfishing9@gmail.com",
     instagramHandle: "@traum.flycast",
     instagramUrl: "https://instagram.com",
     showDemoDepartures: true,
     showReferenceNoticeOnDestinations: false,
     adminPin: "traum2026",
+    legalOwnerName: "Donald Traum — TRAUM Fly Cast Patagonia",
+    legalTaxId: "CUIT / Reg. Fiscal en trámite — Provincia del Neuquén",
+    legalAddress: "Junín de los Andes (CP 8371), Provincia del Neuquén, República Argentina",
+    guideLicenseNumber: "Guía de Pesca Deportiva Habilitado — Reglamento Continental Patagónico",
+    googleClientId: "",
+    smtpUser: "traumflyfishing9@gmail.com",
+    smtpAppPassword: "",
+    resendApiKey: "",
   },
   siteImages: {
     // 1. Hero Background: Lago Huechulafquen & Volcán Lanín north face
@@ -41,9 +52,9 @@ export const initialTraumData: TraumStoreData = {
   },
   paymentConfig: {
     enabled: true,
-    title: "Medios de Pago y Confirmación de Salidas",
+    title: "Medios de Pago y Reserva con Seña",
     subtitle:
-      "Flexibilidad y transparencia para asegurar tu fecha en la Patagonia",
+      "Transparencia y respaldo comercial para asegurar tu fecha en la Patagonia",
     depositPercentage: 30,
     acceptedMethods: [
       "Transferencia Bancaria (Pesos ARS / USD)",
@@ -53,12 +64,12 @@ export const initialTraumData: TraumStoreData = {
     ],
     bankName: "Banco Provincia del Neuquén / Banco Galicia",
     bankAlias: "TRAUM.FLY.PATAGONIA",
-    bankCbu: "0070000000000000000000",
-    bankHolder: "TRAUM FLY CAST PATAGONIA",
+    bankCbu: "",
+    bankHolder: "DONALD TRAUM — TRAUM FLY FISHING",
     mercadoPagoLink: "",
     internationalPaymentLink: "",
     cancellationNotice:
-      "Las reservas se bloquean en el calendario mediante una seña porcentual y el saldo restante se abona previo al inicio de la salida. Reprogramación sin cargo sujeta a condiciones hidrometeorológicas extremas.",
+      "Las reservas se bloquean en el calendario mediante la integración del porcentaje de seña indicado y el saldo restante se abona previo al inicio de la salida. Los datos bancarios (Alias y Titular) y links de pago se habilitan automáticamente al contratar cualquiera de los servicios cargados en la página.",
   },
   experiences: [
     {
@@ -71,7 +82,6 @@ export const initialTraumData: TraumStoreData = {
       extendedDescription:
         "Transmitimos una experiencia cercana al agua, donde el pescador puede leer las corrientes, observar el comportamiento de los peces y disfrutar de la naturaleza desde otra perspectiva. Ideal para quienes disfrutan del acecho técnico, la precisión en el lanzamiento y el silencio de las correderas patagónicas.",
       modality: "Pesca de vadeo",
-      // 8. Experience 01: Pescador lanzando con mosca en río cristalino
       imageUrl:
         "https://upload.wikimedia.org/wikipedia/commons/0/06/Flyfishing.jpg",
       highlights: [
@@ -81,6 +91,7 @@ export const initialTraumData: TraumStoreData = {
       ],
       durationPlaceholder: "Jornada completa o media jornada",
       capacityPlaceholder: "1 a 2 pescadores por guía",
+      priceLabel: "Tarifa según cantidad de jornadas y participantes",
       paymentLink: "",
     },
     {
@@ -93,7 +104,6 @@ export const initialTraumData: TraumStoreData = {
       extendedDescription:
         "Una experiencia que combina navegación, paisajes únicos y oportunidades de pesca en sectores de difícil acceso. Flotar un río patagónico permite cubrir kilómetros de agua prístina, alternando deriva desde la embarcación con paradas estratégicas de vadeo en islas y barrancas.",
       modality: "Pesca en balsa",
-      // 9. Experience 02: Embarcación de deriva (drift boat) pescando con mosca
       imageUrl:
         "https://upload.wikimedia.org/wikipedia/commons/f/f3/ParksFlyShopDriftBoat.jpg",
       highlights: [
@@ -103,6 +113,7 @@ export const initialTraumData: TraumStoreData = {
       ],
       durationPlaceholder: "Jornada completa según tramo y caudal",
       capacityPlaceholder: "Hasta 2 pescadores por embarcación",
+      priceLabel: "Flotada guiada · Consultar tarifa vigente por balsa",
       paymentLink: "",
     },
     {
@@ -115,7 +126,6 @@ export const initialTraumData: TraumStoreData = {
       extendedDescription:
         "Desde quienes quieren iniciarse en la pesca con mosca hasta pescadores experimentados que buscan nuevos desafíos. Diseñamos la propuesta contemplando tus expectativas técnicas, el ritmo de viaje deseado y la compañía con quien elijas compartir el río.",
       modality: "Salida personalizada",
-      // 10. Experience 03: Pesca con mosca en río amplio de montaña
       imageUrl:
         "https://upload.wikimedia.org/wikipedia/commons/6/6d/Fly_fishing_on_White_River_near_Cotter%2C_AR.jpg",
       highlights: [
@@ -125,6 +135,7 @@ export const initialTraumData: TraumStoreData = {
       ],
       durationPlaceholder: "1 o más jornadas a medida",
       capacityPlaceholder: "Individual, Dúo o Grupal",
+      priceLabel: "Cotización personalizada según itinerario",
       paymentLink: "",
     },
   ],
@@ -133,7 +144,6 @@ export const initialTraumData: TraumStoreData = {
       id: "dest-malleo",
       name: "Río Malleo",
       location: "Junín de los Andes, Neuquén",
-      // 11. Destination 01: Río Malleo real
       imageUrl:
         "https://upload.wikimedia.org/wikipedia/commons/6/65/Malleo_River.JPG",
       description:
@@ -149,7 +159,6 @@ export const initialTraumData: TraumStoreData = {
       id: "dest-chimehuin",
       name: "Río Chimehuín",
       location: "Junín de los Andes, Neuquén",
-      // 12. Destination 02: Río Chimehuín real en verano
       imageUrl:
         "https://upload.wikimedia.org/wikipedia/commons/9/9e/R%C3%ADo_Chimehuin_Neuquen_-_Argentina.jpg",
       description:
@@ -165,7 +174,6 @@ export const initialTraumData: TraumStoreData = {
       id: "dest-collon-cura",
       name: "Río Collón Curá",
       location: "Sur del Neuquén, Patagonia",
-      // 13. Destination 03: Río Collón Curá real
       imageUrl:
         "https://upload.wikimedia.org/wikipedia/commons/2/21/RioCollonCura.jpg",
       description:
@@ -181,7 +189,6 @@ export const initialTraumData: TraumStoreData = {
       id: "dest-alumine",
       name: "Río Aluminé",
       location: "Corredor Cordillerano, Neuquén",
-      // 14. Destination 04: Río Aluminé real con araucarias
       imageUrl:
         "https://upload.wikimedia.org/wikipedia/commons/e/e9/Rio_alumine_en_invierno.jpg",
       description:
@@ -197,7 +204,6 @@ export const initialTraumData: TraumStoreData = {
       id: "dest-huechulafquen",
       name: "Lago Huechulafquen y Boca del Chimehuín",
       location: "Parque Nacional Lanín, Neuquén",
-      // 15. Destination 05: Boca del Río Chimehuín / Lago Huechulafquen real
       imageUrl:
         "https://upload.wikimedia.org/wikipedia/commons/b/b8/RIO_CHIMEHUIN_100_METROS.JPG",
       description:
@@ -219,51 +225,57 @@ export const initialTraumData: TraumStoreData = {
       iconName: "Compass",
       enabled: true,
       note: "Incluido en todas las modalidades",
+      priceLabel: "Servicio base de guiada",
     },
     {
       id: "srv-tecnico",
-      title: "Asesoramiento técnico",
+      title: "Asesoramiento técnico y clínica de cast",
       description:
         "Perfeccionamiento de lanzamiento (cast), elección de líderes, lectura de eclosiones y presentación de moscas secas, ninfas y streamers.",
       iconName: "Award",
       enabled: true,
       note: "Adaptado a tu búsqueda técnica",
+      priceLabel: "Clínica personalizada / Guiada técnica",
     },
     {
       id: "srv-planificacion",
-      title: "Planificación de jornadas",
+      title: "Planificación integral de jornadas",
       description:
         "Selección estratégica de los mejores tramos, horarios y ambientes según condiciones climáticas, caudales y época de la temporada.",
       iconName: "Map",
       enabled: true,
       note: "Diseño previo a cada salida",
+      priceLabel: "Itinerario multirrío a medida",
     },
     {
       id: "srv-balsa",
-      title: "Navegación y logística para salidas en balsa",
+      title: "Navegación y logística en balsa",
       description:
         "Embarcaciones preparadas para fly fishing, coordinación de ingresos y egresos del río, y seguridad náutica en todo el recorrido.",
       iconName: "Anchor",
       enabled: true,
       note: "Específico para modalidad en balsa",
+      priceLabel: "Jornada completa de flotada",
     },
     {
       id: "srv-nivel",
-      title: "Experiencias adaptadas al nivel del pescador",
+      title: "Salidas de iniciación y perfeccionamiento",
       description:
         "Paciencia pedagógica para quienes dan sus primeros pasos con la caña mosquera y exigencia táctica para pescadores experimentados.",
       iconName: "Sliders",
       enabled: true,
       note: "Iniciación, intermedio y avanzado",
+      priceLabel: "Bautismo mosquero / Perfeccionamiento",
     },
     {
       id: "srv-equipo",
-      title: "Equipamiento de pesca",
+      title: "Provisión de equipamiento de pesca",
       description:
         "Posibilidad de coordinar cañas, reels, líneas y selección de moscas patagónicas en caso de requerirlo para la salida.",
       iconName: "Briefcase",
       enabled: true,
       note: "Consultar según programa",
+      priceLabel: "Adicional o incluido según paquete",
     },
   ],
   departures: [
@@ -279,6 +291,7 @@ export const initialTraumData: TraumStoreData = {
       additionalInfo:
         "Jornada enfocada en pesca con mosca seca y ninfas livianas en aguas bajas y cristalinas.",
       isDemo: false,
+      priceLabel: "Reserva con seña del 30%",
     },
     {
       id: "dep-2",
@@ -292,6 +305,7 @@ export const initialTraumData: TraumStoreData = {
       additionalInfo:
         "Recorrido en balsa combinando deriva sobre barrancas y paradas de vadeo en correderas.",
       isDemo: false,
+      priceLabel: "Reserva con seña del 30%",
     },
     {
       id: "dep-3",
@@ -305,6 +319,7 @@ export const initialTraumData: TraumStoreData = {
       additionalInfo:
         "Salida coordinada con dos embarcaciones por los brazos e islas del Collón Curá.",
       isDemo: false,
+      priceLabel: "Reserva con seña del 30%",
     },
     {
       id: "dep-4",
@@ -318,12 +333,15 @@ export const initialTraumData: TraumStoreData = {
       additionalInfo:
         "Fecha programada para diseñar una experiencia a medida según nivel y preferencias del pescador.",
       isDemo: false,
+      priceLabel: "Reserva con seña del 30%",
     },
   ],
   reviews: [
     {
       id: "rev-1",
       authorName: "Santiago Mendizábal",
+      authorEmail: "s.mendizabal@gmail.com",
+      verifiedGoogle: true,
       authorLocation: "Buenos Aires, Argentina",
       experienceModality: "Pesca de vadeo · Río Malleo",
       rating: 5,
@@ -334,6 +352,8 @@ export const initialTraumData: TraumStoreData = {
     {
       id: "rev-2",
       authorName: "Hernán & Lucas Pellegrini",
+      authorEmail: "hpellegrini.fly@gmail.com",
+      verifiedGoogle: true,
       authorLocation: "Rosario, Santa Fe",
       experienceModality: "Pesca en balsa · Río Chimehuín",
       rating: 5,
@@ -344,13 +364,17 @@ export const initialTraumData: TraumStoreData = {
     {
       id: "rev-3",
       authorName: "Matías K. Weber",
+      authorEmail: "matias.weber.patagonia@gmail.com",
+      verifiedGoogle: true,
       authorLocation: "Bariloche / Múnich",
       experienceModality: "Salida personalizada · Río Collón Curá",
       rating: 5,
       comment:
-        "Traum hace honor a su nombre.Tres días combinando vadeo técnico y balsa en rincones silenciosos de Junín de los Andes. El respeto por el recurso y el Catch & Release es ejemplar.",
+        "Traum hace honor a su nombre. Tres días combinando vadeo técnico y balsa en rincones silenciosos de Junín de los Andes. El respeto por el recurso y el Catch & Release es ejemplar.",
       createdAt: "2026-01-14T11:15:00.000Z",
     },
   ],
   inquiries: [],
+  cookieConsents: [],
+  regretRequests: [],
 };
