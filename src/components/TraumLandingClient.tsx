@@ -9,6 +9,7 @@ import ExperiencesSection from "@/components/ExperiencesSection";
 import DestinationsSection from "@/components/DestinationsSection";
 import ServicesSection from "@/components/ServicesSection";
 import CalendarSection from "@/components/CalendarSection";
+import GallerySection from "@/components/GallerySection";
 import ReviewsSection from "@/components/ReviewsSection";
 import ConservationSection from "@/components/ConservationSection";
 import ContactSection from "@/components/ContactSection";
@@ -172,6 +173,11 @@ export default function TraumLandingClient({
               })
             }
           />
+        </RevealSection>
+
+        {/* GALERÍA DE JORNADAS EN PATAGONIA */}
+        <RevealSection>
+          <GallerySection gallery={store.gallery || []} />
         </RevealSection>
 
         {/* RESEÑAS DE PESCADORES (CON GOOGLE OBLIGATORIO) */}

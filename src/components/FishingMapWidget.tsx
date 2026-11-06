@@ -93,6 +93,16 @@ export default function FishingMapWidget({
         const markersGroup = L.layerGroup().addTo(map);
         markersLayerRef.current = markersGroup;
 
+        const validCoords = destinations
+          .filter((d) => typeof d.lat === "number" && typeof d.lng === "number")
+          .map((d) => [d.lat, d.lng] as [number, number]);
+        if (validCoords.length > 1) {
+          map.fitBounds(L.latLngBounds(validCoords), {
+            padding: [36, 36],
+            maxZoom: 10,
+          });
+        }
+
         setTimeout(() => {
           map.invalidateSize();
         }, 250);

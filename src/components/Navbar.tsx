@@ -18,6 +18,7 @@ const navLinks = [
   { label: "Destinos y Mapa", href: "#destinos", subtitle: "Ríos y lagos del Neuquén" },
   { label: "Servicios y Pagos", href: "#servicios", subtitle: "Qué incluye cada jornada" },
   { label: "Calendario", href: "#calendario", subtitle: "Fechas y disponibilidad" },
+  { label: "Galería", href: "#galeria", subtitle: "Postales del agua" },
   { label: "Reseñas", href: "#resenas", subtitle: "Voces de pescadores" },
   { label: "Contacto", href: "#contacto", subtitle: "Consultas y reservas" },
 ];

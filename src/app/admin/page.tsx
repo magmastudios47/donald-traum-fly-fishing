@@ -1,45 +1,49 @@
 "use client";
 
 import React, { useState, useEffect, useMemo } from "react";
+import Link from "next/link";
 import {
   TraumStoreData,
   CalendarDeparture,
-  DestinationItem,
+  CustomTripRequest,
+  DepartureEnrollment,
   ExperienceModality,
-  ServiceGroupType,
-  SiteImagesConfig,
-  CustomRequestStatus,
+  GalleryImageItem,
 } from "@/types/traum";
 import {
   Calendar,
-  MapPin,
-  Settings,
   Inbox,
+  Image as ImageIcon,
+  Settings,
   CheckCircle2,
+  AlertTriangle,
   Plus,
   Trash2,
   Save,
   ArrowLeft,
   Lock,
-  Sliders,
-  Image as ImageIcon,
-  MessageSquare,
-  CreditCard,
-  Upload,
-  Star,
   Copy,
   Ban,
   Download,
   UserPlus,
-  BellRing,
   ChevronLeft,
   ChevronRight,
-  ExternalLink,
   Check,
   XCircle,
   Edit3,
+  MessageCircle,
+  Users,
+  Clock,
+  MapPin,
+  Mail,
+  Send,
+  Upload,
+  ArrowUp,
+  ArrowDown,
+  X,
+  RefreshCw,
+  Sparkles,
 } from "lucide-react";
-import Link from "next/link";
 
 const ADMIN_MONTH_NAMES = [
   "Enero",
@@ -55,46 +59,102 @@ const ADMIN_MONTH_NAMES = [
   "Noviembre",
   "Diciembre",
 ];
+
 const ADMIN_WEEKDAYS = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"];
+
+const FISHING_MODALITIES: ExperienceModality[] = [
+  "Pesca en balsa",
+  "Pesca de vadeo",
+  "Salida personalizada",
+];
+
+function getTodayArgentina(): string {
+  try {
+    return new Intl.DateTimeFormat("en-CA", {
+      timeZone: "America/Argentina/Buenos_Aires",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).format(new Date());
+  } catch {
+    const now = new Date(Date.now() - 3 * 60 * 60 * 1000);
+    return now.toISOString().split("T")[0];
+  }
+}
+
+function formatReadableDate(dateStr: string): string {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) return dateStr;
+  const [y, m, d] = dateStr.split("-").map(Number);
+  return `${d} de ${ADMIN_MONTH_NAMES[m - 1] || ""} ${y}`;
+}
 
 function buildWaUrl(phone: string, text: string): string {
   const digits = String(phone || "").replace(/\D/g, "");
+  if (!digits) return "#";
   const formatted = digits.startsWith("54") ? digits : `549${digits}`;
   return `https://wa.me/${formatted}?text=${encodeURIComponent(text)}`;
 }
 
-function ImageInputControl({
-  label,
-  subtitle,
-  value,
-  onChange,
-}: {
-  label: string;
-  subtitle?: string;
-  value: string;
-  onChange: (newUrl: string) => void;
-}) {
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+/**
+ * Optimiza y redimensiona una imagen en el navegador usando Canvas
+ * para mantener carga rápida y evitar archivos pesados.
+ */
+function optimizeImageFile(
+  file: File,
+  maxDimension = 1400,
+  quality = 0.82
+): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const validTypes = ["image/jpeg", "image/jpg", "image/png", "image/webp"];
+    if (!validTypes.includes(file.type.toLowerCase())) {
+      reject(
+        new Error(
+          `El archivo "${file.name}" no tiene un formato válido. Usá fotos JPG, PNG o WebP.`
+        )
+      );
+      return;
+    }
+    const maxBytes = 15 * 1024 * 1024; // 15 MB original
+    if (file.size > maxBytes) {
+      reject(
+        new Error(
+          `La imagen "${file.name}" supera los 15 MB. Elegí una imagen más liviana.`
+        )
+      );
+      return;
+    }
 
-    // Read and compress slightly on client canvas so JSON stays fast and light
     const reader = new FileReader();
+    reader.onerror = () =>
+      reject(new Error(`No se pudo leer el archivo "${file.name}".`));
     reader.onload = () => {
       const img = new window.Image();
+      img.onerror = () =>
+        reject(new Error(`No se pudo procesar la imagen "${file.name}".`));
       img.onload = () => {
         const canvas = document.createElement("canvas");
-        const maxW = 1600;
-        const scale = img.width > maxW ? maxW / img.width : 1;
-        canvas.width = Math.round(img.width * scale);
-        canvas.height = Math.round(img.height * scale);
+        let w = img.width;
+        let h = img.height;
+        if (w > maxDimension || h > maxDimension) {
+          if (w >= h) {
+            h = Math.round((h * maxDimension) / w);
+            w = maxDimension;
+          } else {
+            w = Math.round((w * maxDimension) / h);
+            h = maxDimension;
+          }
+        }
+        canvas.width = w;
+        canvas.height = h;
         const ctx = canvas.getContext("2d");
         if (ctx) {
-          ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-          const dataUrl = canvas.toDataURL("image/jpeg", 0.84);
-          onChange(dataUrl);
+          ctx.drawImage(img, 0, 0, w, h);
+          const out = canvas.toDataURL("image/jpeg", quality);
+          resolve(out);
         } else if (typeof reader.result === "string") {
-          onChange(reader.result);
+          resolve(reader.result);
+        } else {
+          reject(new Error("Error comprimiendo imagen."));
         }
       };
       if (typeof reader.result === "string") {
@@ -102,312 +162,200 @@ function ImageInputControl({
       }
     };
     reader.readAsDataURL(file);
-  };
-
-  return (
-    <div className="bg-[#F2EFE6]/60 border border-[#D8CEB9] p-4 flex flex-col sm:flex-row gap-4 items-start sm:items-center">
-      <div className="w-full sm:w-40 h-28 bg-[#292D29] border border-[#D8CEB9] overflow-hidden flex-shrink-0">
-        {value ? (
-          <img
-            src={value}
-            alt={label}
-            className="w-full h-full object-cover"
-          />
-        ) : null}
-      </div>
-
-      <div className="flex-1 w-full space-y-2">
-        <div>
-          <span className="text-xs font-semibold text-[#263D32] block">
-            {label}
-          </span>
-          {subtitle && (
-            <span className="text-[11px] text-[#746657] block">{subtitle}</span>
-          )}
-        </div>
-
-        <div className="flex flex-col sm:flex-row gap-2">
-          <input
-            type="text"
-            value={value}
-            onChange={(e) => onChange(e.target.value)}
-            placeholder="Pegá la URL de la fotografía..."
-            className="flex-1 px-3 py-2 bg-white border border-[#D8CEB9] text-xs text-[#292D29]"
-          />
-
-          <label className="px-3.5 py-2 bg-[#263D32] text-[#F2EFE6] hover:bg-[#65745A] text-[10px] uppercase tracking-[0.18em] font-semibold inline-flex items-center justify-center gap-1.5 cursor-pointer whitespace-nowrap">
-            <Upload className="w-3.5 h-3.5" />
-            <span>Subir foto</span>
-            <input
-              type="file"
-              accept="image/*"
-              onChange={handleFileUpload}
-              className="hidden"
-            />
-          </label>
-        </div>
-      </div>
-    </div>
-  );
+  });
 }
+
+interface SmartDepartureDefaults {
+  destination: string;
+  experienceType: ExperienceModality;
+  startTime: string;
+  endTime: string;
+  maxParticipants: number;
+}
+
+const DEFAULT_SMART_VALUES: SmartDepartureDefaults = {
+  destination: "Río Chimehuín",
+  experienceType: "Pesca en balsa",
+  startTime: "08:00",
+  endTime: "17:30",
+  maxParticipants: 2,
+};
 
 export default function AdminDashboardPage() {
   const [store, setStore] = useState<TraumStoreData | null>(null);
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [saveMessage, setSaveMessage] = useState<string | null>(null);
-
-  // Simple Auth Gate
   const [unlocked, setUnlocked] = useState(false);
   const [pinInput, setPinInput] = useState("");
   const [pinError, setPinError] = useState(false);
 
-  // Active Tab
+  // Navegación principal (4 secciones claras)
   const [activeTab, setActiveTab] = useState<
-    | "departures"
-    | "destinations"
-    | "images"
-    | "services"
-    | "reviews"
-    | "inquiries"
-    | "legal_cookies"
-    | "settings"
-  >("departures");
+    "calendario" | "solicitudes" | "galeria" | "ajustes"
+  >("calendario");
 
-  // New Departure Form State
-  const [newDepDate, setNewDepDate] = useState("2026-11-28");
-  const [newDepStartTime, setNewDepStartTime] = useState("08:00");
-  const [newDepEndTime, setNewDepEndTime] = useState("17:30");
-  const [newDepDestination, setNewDepDestination] = useState("Río Malleo");
-  const [newDepExperience, setNewDepExperience] =
-    useState<ExperienceModality>("Pesca de vadeo");
-  const [newDepServiceGroup, setNewDepServiceGroup] =
-    useState<ServiceGroupType>("Salida para dos personas");
-  const [newDepMax, setNewDepMax] = useState(2);
-  const [newDepInfo, setNewDepInfo] = useState("");
-  const [newDepRepeatMode, setNewDepRepeatMode] = useState<
-    "none" | "daily" | "weekly"
-  >("none");
-  const [newDepRepeatCount, setNewDepRepeatCount] = useState(2);
+  // Notificaciones visibles (éxito / error)
+  const [bannerMsg, setBannerMsg] = useState<{
+    type: "ok" | "err";
+    text: string;
+  } | null>(null);
+  const [busyAction, setBusyAction] = useState(false);
 
-  // Edit Departure State
-  const [editingDepId, setEditingDepId] = useState<string | null>(null);
-  const [editDepDate, setEditDepDate] = useState("");
-  const [editDepStartTime, setEditDepStartTime] = useState("08:00");
-  const [editDepEndTime, setEditDepEndTime] = useState("17:30");
-  const [editDepDestination, setEditDepDestination] = useState("");
-  const [editDepExperience, setEditDepExperience] =
-    useState<ExperienceModality>("Pesca en balsa");
-  const [editDepMax, setEditDepMax] = useState(2);
-  const [editDepInfo, setEditDepInfo] = useState("");
+  // Estado del calendario principal
+  const [todayAR, setTodayAR] = useState("2026-11-06");
+  const [calYear, setCalYear] = useState(2026);
+  const [calMonth, setCalMonth] = useState(10); // 0-indexed (10 = Noviembre)
+  const [departureFilter, setDepartureFilter] = useState<
+    "proximas" | "todas" | "canceladas"
+  >("proximas");
 
-  // Manual Enrollment Form State per departure
-  const [manualEnrollDepId, setManualEnrollDepId] = useState<string | null>(
+  // Modal de Día / Crear o Editar o Duplicar Salida (2 clics)
+  const [dayModalOpen, setDayModalOpen] = useState(false);
+  const [modalMode, setModalMode] = useState<"create" | "edit" | "duplicate">(
+    "create"
+  );
+  const [editingDepartureId, setEditingDepartureId] = useState<string | null>(
     null
   );
+  const [modalDate, setModalDate] = useState("2026-11-12");
+  const [modalRiver, setModalRiver] = useState("Río Chimehuín");
+  const [modalType, setModalType] =
+    useState<ExperienceModality>("Pesca en balsa");
+  const [modalStart, setModalStart] = useState("08:00");
+  const [modalEnd, setModalEnd] = useState("17:30");
+  const [modalSpots, setModalSpots] = useState(2);
+  const [modalNotes, setModalNotes] = useState("");
+  const [modalRepeatMode, setModalRepeatMode] = useState<
+    "none" | "daily" | "weekly"
+  >("none");
+  const [modalRepeatCount, setModalRepeatCount] = useState(2);
+
+  // Salidas con lista de anotados desplegada
+  const [expandedDepId, setExpandedDepId] = useState<string | null>(null);
+
+  // Formulario rápido para anotar pescador manualmente
   const [manualName, setManualName] = useState("");
   const [manualPhone, setManualPhone] = useState("");
   const [manualEmail, setManualEmail] = useState("");
   const [manualCount, setManualCount] = useState(1);
 
-  // Blocked Day Form State
-  const [blockDateInput, setBlockDateInput] = useState("2026-11-20");
-  const [blockReasonInput, setBlockReasonInput] = useState("");
+  // Solicitudes: proponer otra fecha inline en la misma tarjeta
+  const [proposingDateReqId, setProposingDateReqId] = useState<string | null>(
+    null
+  );
+  const [proposedDateVal, setProposedDateVal] = useState("");
+  const [proposedNoteVal, setProposedNoteVal] = useState("");
 
-  // Admin Calendar Month/Year State
-  const [adminCalMonth, setAdminCalMonth] = useState(10); // Noviembre
-  const [adminCalYear, setAdminCalYear] = useState(2026);
+  // Modal para Limpiar Historial de Solicitudes
+  const [clearHistoryModalOpen, setClearHistoryModalOpen] = useState(false);
+  const [clearMode, setClearMode] = useState<"resolved" | "all">("resolved");
+  const [confirmDeletePending, setConfirmDeletePending] = useState(false);
 
-  // Custom Request Response Drafts
-  const [reqResponseDrafts, setReqResponseDrafts] = useState<
-    Record<string, { altDate: string; reply: string }>
+  // Galería de fotos
+  const [uploadingGallery, setUploadingGallery] = useState(false);
+  const [newGalleryCaption, setNewGalleryCaption] = useState("");
+  const [editingCaptions, setEditingCaptions] = useState<
+    Record<string, string>
   >({});
 
-  // New Destination Form State
-  const [newDestName, setNewDestName] = useState("");
-  const [newDestLocation, setNewDestLocation] = useState(
-    "Junín de los Andes, Neuquén"
-  );
-  const [newDestImage, setNewDestImage] = useState(
-    "https://upload.wikimedia.org/wikipedia/commons/6/65/Malleo_River.JPG"
-  );
-  const [newDestDesc, setNewDestDesc] = useState("");
-  const [newDestLat, setNewDestLat] = useState("-39.8500");
-  const [newDestLng, setNewDestLng] = useState("-71.1500");
-  const [newDestDistance, setNewDestDistance] = useState(
-    "30 km de Junín de los Andes"
-  );
-  const [newDestWaterType, setNewDestWaterType] = useState<
-    "Río" | "Lago" | "Cuenca / Río"
-  >("Río");
+  // Prueba de correo electrónico
+  const [testingEmail, setTestingEmail] = useState(false);
+  const [testEmailRecipient, setTestEmailRecipient] = useState("");
+  const [testEmailResult, setTestEmailResult] = useState<{
+    sent: boolean;
+    channel: string;
+    errorDetails?: string;
+  } | null>(null);
 
+  const showToast = (text: string, type: "ok" | "err" = "ok") => {
+    setBannerMsg({ text, type });
+    setTimeout(() => {
+      setBannerMsg((prev) => (prev?.text === text ? null : prev));
+    }, 6000);
+  };
+
+  const broadcastUpdate = () => {
+    if (typeof BroadcastChannel !== "undefined") {
+      try {
+        const bc = new BroadcastChannel("traum_live_sync");
+        bc.postMessage({ updatedAt: Date.now() });
+        bc.close();
+      } catch {
+        // ignore
+      }
+    }
+  };
+
+  // Cargar store y valores inteligentes por defecto
   useEffect(() => {
-    const loadStore = () => {
-      fetch("/api/traum", { cache: "no-store" })
-        .then((res) => res.json())
-        .then((data: TraumStoreData) => {
-          setStore(data);
-          setLoading(false);
-        })
-        .catch(() => setLoading(false));
-    };
-    loadStore();
+    const ar = getTodayArgentina();
+    setTodayAR(ar);
+    const [y, m] = ar.split("-").map(Number);
+    if (y && m) {
+      setCalYear(y);
+      setCalMonth(m - 1);
+    }
+
+    fetch("/api/traum", { cache: "no-store" })
+      .then((r) => r.json())
+      .then((data: TraumStoreData) => {
+        setStore(data);
+        setTestEmailRecipient(
+          data.settings?.notificationEmail ||
+            data.settings?.email ||
+            "traumflyfishing9@gmail.com"
+        );
+        const initialCaps: Record<string, string> = {};
+        for (const g of data.gallery || []) {
+          initialCaps[g.id] = g.caption || "";
+        }
+        setEditingCaptions(initialCaps);
+        setLoading(false);
+      })
+      .catch(() => setLoading(false));
   }, []);
 
-  const persistStore = async (updated: TraumStoreData, msg?: string) => {
-    setSaving(true);
-    setStore(updated);
+  const getSmartDefaults = (): SmartDepartureDefaults => {
+    if (typeof window === "undefined") return DEFAULT_SMART_VALUES;
     try {
-      const res = await fetch("/api/traum", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(updated),
-      });
-      const saved = await res.json();
-      setStore(saved);
-      if (typeof BroadcastChannel !== "undefined") {
-        try {
-          const bc = new BroadcastChannel("traum_live_sync");
-          bc.postMessage({ updatedAt: Date.now() });
-          bc.close();
-        } catch {
-          // Ignore
-        }
-      }
-      setSaveMessage(
-        msg || "Cambios guardados en vivo para todos los usuarios"
+      const saved = window.localStorage.getItem(
+        "traum_last_departure_defaults"
       );
-      setTimeout(() => setSaveMessage(null), 3500);
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const handleCancelOrReleaseInquiry = async (
-    inquiryId: string,
-    deleteRecord = false
-  ) => {
-    setSaving(true);
-    try {
-      const res = await fetch("/api/traum", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          type: "CANCEL_INQUIRY",
-          inquiryId,
-          deleteRecord,
-        }),
-      });
-      const data = await res.json();
-      if (res.ok && data.store) {
-        setStore(data.store);
-        if (typeof BroadcastChannel !== "undefined") {
-          try {
-            const bc = new BroadcastChannel("traum_live_sync");
-            bc.postMessage({ updatedAt: Date.now() });
-            bc.close();
-          } catch {
-            // Ignore
-          }
-        }
-        setSaveMessage(
-          deleteRecord
-            ? "Pedido eliminado y cupos liberados en el calendario"
-            : "Reserva dada de baja y cupos liberados en vivo"
-        );
-        setTimeout(() => setSaveMessage(null), 3500);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        return {
+          destination: parsed.destination || DEFAULT_SMART_VALUES.destination,
+          experienceType:
+            parsed.experienceType || DEFAULT_SMART_VALUES.experienceType,
+          startTime: parsed.startTime || DEFAULT_SMART_VALUES.startTime,
+          endTime: parsed.endTime || DEFAULT_SMART_VALUES.endTime,
+          maxParticipants:
+            Number(parsed.maxParticipants) ||
+            DEFAULT_SMART_VALUES.maxParticipants,
+        };
       }
-    } finally {
-      setSaving(false);
+    } catch {
+      // ignore
+    }
+    return DEFAULT_SMART_VALUES;
+  };
+
+  const saveSmartDefaults = (vals: SmartDepartureDefaults) => {
+    if (typeof window === "undefined") return;
+    try {
+      window.localStorage.setItem(
+        "traum_last_departure_defaults",
+        JSON.stringify(vals)
+      );
+    } catch {
+      // ignore
     }
   };
 
-  const handleUnlock = (e: React.FormEvent) => {
-    e.preventDefault();
-    const expectedPin = store?.settings.adminPin || "traum2026";
-    if (pinInput.trim() === expectedPin || pinInput.trim() === "traum") {
-      setUnlocked(true);
-      setPinError(false);
-    } else {
-      setPinError(true);
-    }
-  };
-
-  if (loading || !store) {
-    return (
-      <div className="min-h-screen bg-[#292D29] text-[#F2EFE6] flex items-center justify-center">
-        <div className="text-center space-y-2">
-          <span className="font-editorial text-3xl tracking-[0.25em] block">
-            TRAUM
-          </span>
-          <p className="text-xs uppercase tracking-[0.2em] text-[#D8CEB9]">
-            Cargando panel administrativo...
-          </p>
-        </div>
-      </div>
-    );
-  }
-
-  if (!unlocked) {
-    return (
-      <div className="min-h-screen bg-[#292D29] text-[#F2EFE6] flex items-center justify-center p-6">
-        <div className="max-w-md w-full bg-[#263D32] border border-[#899487]/35 p-8 shadow-2xl space-y-6">
-          <div className="flex items-center justify-between border-b border-[#899487]/30 pb-5">
-            <div>
-              <span className="font-editorial text-3xl tracking-[0.22em] block">
-                TRAUM
-              </span>
-              <span className="text-[10px] uppercase tracking-[0.26em] text-[#D8CEB9]">
-                Administración de Salidas y Contenidos
-              </span>
-            </div>
-            <Lock className="w-6 h-6 text-[#D8CEB9]" />
-          </div>
-
-          <form onSubmit={handleUnlock} className="space-y-4">
-            <div>
-              <label className="block text-[11px] uppercase tracking-[0.2em] text-[#D8CEB9] mb-2">
-                Clave de acceso administrativo
-              </label>
-              <input
-                type="password"
-                value={pinInput}
-                onChange={(e) => setPinInput(e.target.value)}
-                placeholder="Ingresá la clave (por defecto: traum2026)"
-                className="w-full px-4 py-3 bg-[#292D29] border border-[#899487]/40 text-[#F2EFE6] text-sm focus:border-[#D8CEB9] focus:outline-none"
-              />
-              {pinError && (
-                <p className="text-xs text-amber-300 mt-2">
-                  Clave incorrecta. La clave inicial configurada es{" "}
-                  <strong>{store.settings.adminPin}</strong>.
-                </p>
-              )}
-            </div>
-
-            <button
-              type="submit"
-              className="w-full py-3.5 bg-[#D8CEB9] text-[#263D32] hover:bg-[#F2EFE6] text-xs uppercase tracking-[0.22em] font-semibold transition-colors cursor-pointer"
-            >
-              Ingresar al panel
-            </button>
-          </form>
-
-          <div className="pt-3 border-t border-[#899487]/25 flex items-center justify-between text-xs text-[#F2EFE6]/70">
-            <span>Clave inicial: traum2026</span>
-            <Link href="/" className="underline text-[#D8CEB9]">
-              ← Volver a la web
-            </Link>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  const callAdminAction = async (
+  const runAdminAction = async (
     payload: Record<string, unknown>,
-    successMsg: string
+    successMsg?: string
   ) => {
-    setSaving(true);
+    setBusyAction(true);
     try {
       const res = await fetch("/api/traum", {
         method: "POST",
@@ -415,2136 +363,1622 @@ export default function AdminDashboardPage() {
         body: JSON.stringify(payload),
       });
       const data = await res.json();
-      if (res.ok && data.store) {
-        setStore(data.store);
-        if (typeof BroadcastChannel !== "undefined") {
-          try {
-            const bc = new BroadcastChannel("traum_live_sync");
-            bc.postMessage({ updatedAt: Date.now() });
-            bc.close();
-          } catch {
-            // Ignore
-          }
-        }
-        setSaveMessage(successMsg);
-        setTimeout(() => setSaveMessage(null), 4000);
-        return data;
-      } else {
-        setSaveMessage(data.error || "No se pudo completar la acción");
-        setTimeout(() => setSaveMessage(null), 4000);
+      if (!res.ok) {
+        showToast(data.error || "No se pudo completar la acción.", "err");
+        return { ok: false, data };
       }
+      if (data.store) {
+        setStore(data.store);
+      }
+      broadcastUpdate();
+      if (successMsg) {
+        showToast(successMsg, "ok");
+      }
+      return { ok: true, data };
+    } catch {
+      showToast("Error de conexión con el servidor.", "err");
+      return { ok: false, data: null };
     } finally {
-      setSaving(false);
+      setBusyAction(false);
     }
-    return null;
   };
 
-  // Handlers for Departures
-  const handleAddDeparture = async (e: React.FormEvent) => {
+  const handleSaveFullStore = async (customSuccess?: string) => {
+    if (!store) return;
+    setBusyAction(true);
+    try {
+      const res = await fetch("/api/traum", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(store),
+      });
+      if (!res.ok) throw new Error("Error guardando");
+      const saved: TraumStoreData = await res.json();
+      setStore(saved);
+      broadcastUpdate();
+      showToast(customSuccess || "Cambios guardados correctamente.", "ok");
+    } catch {
+      showToast("No se pudieron guardar los cambios.", "err");
+    } finally {
+      setBusyAction(false);
+    }
+  };
+
+  // Listado de todos los ríos y lagos disponibles (los 12 de Neuquén + personalizados)
+  const riverList = useMemo(() => {
+    const names = new Set<string>();
+    for (const d of store?.destinations || []) {
+      if (d.name) names.add(d.name);
+    }
+    for (const dep of store?.departures || []) {
+      if (dep.destination) names.add(dep.destination);
+    }
+    return Array.from(names);
+  }, [store?.destinations, store?.departures]);
+
+  // KPIs para el resumen superior
+  const summaryStats = useMemo(() => {
+    if (!store) {
+      return {
+        pendingRequestsCount: 0,
+        upcomingDeparturesCount: 0,
+        todayEnrolledPeopleCount: 0,
+      };
+    }
+    const pendingRequestsCount = (store.customRequests || []).filter(
+      (r) => r.status === "pendiente"
+    ).length;
+
+    const upcomingDeparturesCount = (store.departures || []).filter(
+      (d) => d.status !== "cancelada" && d.date >= todayAR
+    ).length;
+
+    const todayDepartureIds = new Set(
+      (store.departures || [])
+        .filter((d) => d.status !== "cancelada" && d.date === todayAR)
+        .map((d) => d.id)
+    );
+    const todayEnrolledPeopleCount = (store.enrollments || [])
+      .filter(
+        (e) =>
+          todayDepartureIds.has(e.departureId) && e.status === "confirmada"
+      )
+      .reduce((acc, e) => acc + (Number(e.participantsCount) || 1), 0);
+
+    return {
+      pendingRequestsCount,
+      upcomingDeparturesCount,
+      todayEnrolledPeopleCount,
+    };
+  }, [store, todayAR]);
+
+  // Celdas del calendario mensual
+  const calendarCells = useMemo(() => {
+    const firstDay = new Date(calYear, calMonth, 1);
+    const daysInMonth = new Date(calYear, calMonth + 1, 0).getDate();
+    const startOffset = (firstDay.getDay() + 6) % 7; // Lunes = 0
+    const cells: Array<{ day: number | null; dateStr: string | null }> = [];
+    for (let i = 0; i < startOffset; i++) {
+      cells.push({ day: null, dateStr: null });
+    }
+    for (let d = 1; d <= daysInMonth; d++) {
+      const mStr = String(calMonth + 1).padStart(2, "0");
+      const dStr = String(d).padStart(2, "0");
+      cells.push({ day: d, dateStr: `${calYear}-${mStr}-${dStr}` });
+    }
+    return cells;
+  }, [calYear, calMonth]);
+
+  // Salidas filtradas para mostrar debajo del calendario
+  const visibleDepartures = useMemo(() => {
+    if (!store) return [];
+    const list = [...(store.departures || [])].sort((a, b) =>
+      a.date.localeCompare(b.date)
+    );
+    if (departureFilter === "proximas") {
+      return list.filter(
+        (d) => d.status !== "cancelada" && d.date >= todayAR
+      );
+    }
+    if (departureFilter === "canceladas") {
+      return list.filter((d) => d.status === "cancelada");
+    }
+    return list;
+  }, [store, departureFilter, todayAR]);
+
+  // =========================================================================
+  // ACCIONES EN 2 CLICS: ABRIR MODAL DE DÍA / CREAR / EDITAR / DUPLICAR
+  // =========================================================================
+  const openCreateModalForDate = (dateStr: string) => {
+    const smart = getSmartDefaults();
+    setModalMode("create");
+    setEditingDepartureId(null);
+    setModalDate(dateStr);
+    setModalRiver(smart.destination);
+    setModalType(smart.experienceType);
+    setModalStart(smart.startTime);
+    setModalEnd(smart.endTime);
+    setModalSpots(smart.maxParticipants);
+    setModalNotes("");
+    setModalRepeatMode("none");
+    setModalRepeatCount(2);
+    setDayModalOpen(true);
+  };
+
+  const openEditModalForDeparture = (dep: CalendarDeparture) => {
+    setModalMode("edit");
+    setEditingDepartureId(dep.id);
+    setModalDate(dep.date);
+    setModalRiver(dep.destination);
+    setModalType(dep.experienceType);
+    setModalStart(dep.startTime || "08:00");
+    setModalEnd(dep.endTime || "17:30");
+    setModalSpots(dep.maxParticipants);
+    setModalNotes(dep.additionalInfo || "");
+    setModalRepeatMode("none");
+    setDayModalOpen(true);
+  };
+
+  const openDuplicateModalForDeparture = (dep: CalendarDeparture) => {
+    setModalMode("duplicate");
+    setEditingDepartureId(dep.id);
+    setModalDate(dep.date);
+    setModalRiver(dep.destination);
+    setModalType(dep.experienceType);
+    setModalStart(dep.startTime || "08:00");
+    setModalEnd(dep.endTime || "17:30");
+    setModalSpots(dep.maxParticipants);
+    setModalNotes(dep.additionalInfo || "");
+    setModalRepeatMode("none");
+    setDayModalOpen(true);
+  };
+
+  const handleSaveDepartureFromModal = async (e: React.FormEvent) => {
     e.preventDefault();
-    await callAdminAction(
+    if (!modalDate || !modalRiver.trim()) {
+      showToast("Elegí una fecha y un río o lago.", "err");
+      return;
+    }
+
+    // Guardar como valores por defecto inteligentes para la próxima vez
+    saveSmartDefaults({
+      destination: modalRiver.trim(),
+      experienceType: modalType,
+      startTime: modalStart,
+      endTime: modalEnd,
+      maxParticipants: modalSpots,
+    });
+
+    if (modalMode === "edit" && editingDepartureId) {
+      const res = await runAdminAction(
+        {
+          type: "MANAGE_DEPARTURE",
+          subAction: "UPDATE",
+          departureId: editingDepartureId,
+          date: modalDate,
+          startTime: modalStart,
+          endTime: modalEnd,
+          destination: modalRiver.trim(),
+          experienceType: modalType,
+          maxParticipants: modalSpots,
+          additionalInfo: modalNotes.trim(),
+        },
+        "Salida actualizada con éxito."
+      );
+      if (res.ok) setDayModalOpen(false);
+      return;
+    }
+
+    const res = await runAdminAction(
       {
         type: "MANAGE_DEPARTURE",
-        subAction: "CREATE",
-        date: newDepDate,
-        startTime: newDepStartTime,
-        endTime: newDepEndTime,
-        destination: newDepDestination,
-        experienceType: newDepExperience,
-        maxParticipants: Number(newDepMax) || 2,
-        additionalInfo: newDepInfo,
-        repeatMode: newDepRepeatMode,
-        repeatCount: Number(newDepRepeatCount) || 1,
+        subAction: modalMode === "duplicate" ? "DUPLICATE" : "CREATE",
+        date: modalDate,
+        startTime: modalStart,
+        endTime: modalEnd,
+        destination: modalRiver.trim(),
+        experienceType: modalType,
+        maxParticipants: modalSpots,
+        additionalInfo: modalNotes.trim(),
+        repeatMode: modalRepeatMode,
+        repeatCount: modalRepeatCount,
       },
-      newDepRepeatMode === "none"
-        ? "Salida programada agregada al calendario"
-        : `Se crearon ${newDepRepeatCount} salidas recurrentes en el calendario`
+      modalMode === "duplicate"
+        ? `Salida duplicada para el ${formatReadableDate(modalDate)}.`
+        : `Salida creada para el ${formatReadableDate(modalDate)}.`
     );
-    setNewDepInfo("");
+    if (res.ok) {
+      setDayModalOpen(false);
+    }
   };
 
-  const handleDuplicateDeparture = async (dep: CalendarDeparture) => {
-    const [y, m, d] = dep.date.split("-").map(Number);
-    const nextWeek = new Date(Date.UTC(y, m - 1, d + 7))
-      .toISOString()
-      .split("T")[0];
-    await callAdminAction(
-      {
-        type: "MANAGE_DEPARTURE",
-        subAction: "DUPLICATE",
-        date: nextWeek,
-        startTime: dep.startTime || "08:00",
-        endTime: dep.endTime || "17:30",
-        destination: dep.destination,
-        experienceType: dep.experienceType,
-        maxParticipants: dep.maxParticipants,
-        additionalInfo: dep.additionalInfo,
-      },
-      `Salida duplicada para el ${nextWeek}`
-    );
-  };
+  const handleCancelDeparture = async (dep: CalendarDeparture) => {
+    const enrolledCount = (store?.enrollments || []).filter(
+      (e) => e.departureId === dep.id && e.status !== "cancelada"
+    ).length;
+    const confirmText =
+      enrolledCount > 0
+        ? `¿Seguro que querés cancelar la salida del ${formatReadableDate(
+            dep.date
+          )} en ${
+            dep.destination
+          }? Se notificará automáticamente a los ${enrolledCount} anotado(s).`
+        : `¿Seguro que querés cancelar la salida del ${formatReadableDate(
+            dep.date
+          )} en ${dep.destination}?`;
 
-  const handleSaveEditedDeparture = async (departureId: string) => {
-    await callAdminAction(
-      {
-        type: "MANAGE_DEPARTURE",
-        subAction: "UPDATE",
-        departureId,
-        date: editDepDate,
-        startTime: editDepStartTime,
-        endTime: editDepEndTime,
-        destination: editDepDestination,
-        experienceType: editDepExperience,
-        maxParticipants: Number(editDepMax) || 2,
-        additionalInfo: editDepInfo,
-      },
-      "Salida programada actualizada"
-    );
-    setEditingDepId(null);
-  };
+    if (!window.confirm(confirmText)) return;
 
-  const handleCancelDepartureWithNotification = async (
-    dep: CalendarDeparture
-  ) => {
-    await callAdminAction(
+    await runAdminAction(
       {
         type: "MANAGE_DEPARTURE",
         subAction: "CANCEL",
         departureId: dep.id,
         reason:
-          "Salida cancelada por el guía (reprogramación o condiciones del río).",
+          "Cancelación informada por el guía (condiciones climáticas o del río).",
       },
-      `Salida del ${dep.date} cancelada y aviso enviado a todos los anotados`
+      "Salida cancelada y notificaciones enviadas."
     );
   };
 
-  const handleDeleteDeparture = async (id: string) => {
-    await callAdminAction(
+  const handleDeleteDeparturePermanently = async (dep: CalendarDeparture) => {
+    if (
+      !window.confirm(
+        `¿Eliminar definitivamente del registro la salida del ${formatReadableDate(
+          dep.date
+        )} (${dep.destination})?`
+      )
+    ) {
+      return;
+    }
+    await runAdminAction(
       {
         type: "MANAGE_DEPARTURE",
         subAction: "DELETE",
-        departureId: id,
+        departureId: dep.id,
       },
-      "Salida eliminada del calendario"
+      "Salida eliminada del calendario."
     );
   };
 
-  const handleAddManualEnrollment = async (departureId: string) => {
-    if (!manualName.trim() || !manualPhone.trim()) return;
-    await callAdminAction(
-      {
-        type: "ADD_MANUAL_ENROLLMENT",
-        departureId,
-        fullName: manualName.trim(),
-        whatsapp: manualPhone.trim(),
-        email: manualEmail.trim() || "cliente@traumflycast.com",
-        participantsCount: Number(manualCount) || 1,
-      },
-      `Se anotó manualmente a ${manualName.trim()}`
+  const exportDepartureEnrollmentsCsv = (dep: CalendarDeparture) => {
+    if (!store) return;
+    const list = (store.enrollments || []).filter(
+      (e) => e.departureId === dep.id
     );
-    setManualName("");
-    setManualPhone("");
-    setManualEmail("");
-    setManualCount(1);
-    setManualEnrollDepId(null);
-  };
-
-  const handlePromoteFromWaitlist = async (enrollmentId: string) => {
-    await callAdminAction(
-      {
-        type: "PROMOTE_WAITLIST",
-        enrollmentId,
-      },
-      "Pescador promovido de lista de espera a anotación confirmada"
-    );
-  };
-
-  const handleToggleBlockDay = async (
-    dateStr: string,
-    reason?: string,
-    forceBlock?: boolean
-  ) => {
-    await callAdminAction(
-      {
-        type: "TOGGLE_BLOCKED_DAY",
-        date: dateStr,
-        reason: reason || "",
-        forceBlock,
-      },
-      `Estado de bloqueo actualizado para el día ${dateStr}`
-    );
-    setBlockReasonInput("");
-  };
-
-  const handleExportEnrollmentsCsv = (filterDepartureId?: string) => {
-    const list = (store.enrollments || []).filter((e) =>
-      filterDepartureId ? e.departureId === filterDepartureId : true
-    );
-    const headers = [
+    const header = [
       "Codigo",
-      "Fecha_Salida",
-      "Horario",
-      "Rio_Destino",
-      "Tipo_Pesca",
+      "Estado",
       "Nombre",
       "Telefono_WhatsApp",
       "Email",
       "Cantidad_Personas",
-      "Estado",
       "Comentarios",
-      "Fecha_Anotacion",
+      "Fecha_Salida",
+      "Rio",
     ];
-    const rows = list.map((enr) => {
-      const dep = store.departures.find((d) => d.id === enr.departureId);
-      const cols = [
-        enr.bookingCode,
-        dep?.date || "",
-        dep ? `${dep.startTime || "08:00"}-${dep.endTime || "17:30"}` : "",
-        dep?.destination || "",
-        dep?.experienceType || "",
-        enr.fullName,
-        enr.whatsapp,
-        enr.email,
-        String(enr.participantsCount),
-        enr.status,
-        (enr.comments || "").replace(/"/g, '""'),
-        enr.createdAt,
-      ];
-      return cols.map((c) => `"${c}"`).join(",");
-    });
-    const csvContent = "\uFEFF" + [headers.join(","), ...rows].join("\n");
+    const rows = list.map((e) =>
+      [
+        e.bookingCode,
+        e.status,
+        `"${(e.fullName || "").replace(/"/g, '""')}"`,
+        `"${(e.whatsapp || "").replace(/"/g, '""')}"`,
+        `"${(e.email || "").replace(/"/g, '""')}"`,
+        e.participantsCount,
+        `"${(e.comments || "").replace(/"/g, '""')}"`,
+        dep.date,
+        `"${dep.destination.replace(/"/g, '""')}"`,
+      ].join(",")
+    );
+    const csvContent = "\uFEFF" + [header.join(","), ...rows].join("\n");
     const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = filterDepartureId
-      ? `anotados-salida-${filterDepartureId}.csv`
-      : `anotados-traum-${new Date().toISOString().split("T")[0]}.csv`;
+    a.download = `anotados-${dep.date}-${dep.destination
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")}.csv`;
     a.click();
     URL.revokeObjectURL(url);
   };
 
-  const handleRespondCustomRequest = async (
-    requestId: string,
-    status: CustomRequestStatus,
-    alternativeDate?: string,
-    guideResponse?: string
-  ) => {
-    await callAdminAction(
-      {
-        type: "RESPOND_CUSTOM_REQUEST",
-        requestId,
-        status,
-        alternativeDate,
-        guideResponse,
-      },
-      `Solicitud actualizada a estado: ${status}`
-    );
-  };
+  // =========================================================================
+  // LIMPIAR HISTORIAL DE SOLICITUDES
+  // =========================================================================
+  const handleConfirmClearHistory = async () => {
+    if (!store) return;
+    const pendingCount = (store.customRequests || []).filter(
+      (r) => r.status === "pendiente"
+    ).length;
 
-  const handleConvertRequestToDeparture = async (
-    requestId: string,
-    mode: "privada" | "abierta"
-  ) => {
-    await callAdminAction(
-      {
-        type: "CONVERT_REQUEST_TO_DEPARTURE",
-        requestId,
-        mode,
-        maxParticipants: mode === "abierta" ? 4 : undefined,
-      },
-      `Solicitud convertida en salida programada (${mode}) con anotación confirmada`
-    );
-  };
+    if (clearMode === "all" && pendingCount > 0 && !confirmDeletePending) {
+      showToast(
+        "Marcá la casilla de confirmación para borrar también las solicitudes pendientes.",
+        "err"
+      );
+      return;
+    }
 
-  // Handlers for Destinations
-  const handleAddDestination = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newDestName.trim()) return;
-    const created: DestinationItem = {
-      id: `dest-${Date.now()}`,
-      name: newDestName,
-      location: newDestLocation,
-      imageUrl: newDestImage,
-      description: newDestDesc,
-      modalities: ["Pesca de vadeo", "Pesca en balsa", "Salida personalizada"],
-      isReferenceDemo: false,
-      lat: parseFloat(newDestLat) || -39.9506,
-      lng: parseFloat(newDestLng) || -71.0703,
-      distanceFromJunin: newDestDistance || "Zona Junín de los Andes",
-      waterType: newDestWaterType,
-    };
-    const updated: TraumStoreData = {
-      ...store,
-      destinations: [...store.destinations, created],
-    };
-    persistStore(updated, "Nuevo destino incorporado al mapa y listado");
-    setNewDestName("");
-    setNewDestDesc("");
-  };
-
-  const handleDeleteDestination = (id: string) => {
-    const updated: TraumStoreData = {
-      ...store,
-      destinations: store.destinations.filter((d) => d.id !== id),
-    };
-    persistStore(updated, "Destino eliminado");
-  };
-
-  // Handler for Service toggles
-  const handleToggleService = (id: string) => {
-    const updated: TraumStoreData = {
-      ...store,
-      services: store.services.map((srv) =>
-        srv.id === id ? { ...srv, enabled: !srv.enabled } : srv
-      ),
-    };
-    persistStore(updated, "Estado de prestación actualizado");
-  };
-
-  // Handler for Deleting Inappropriate Reviews
-  const handleDeleteReview = (id: string) => {
-    const updated: TraumStoreData = {
-      ...store,
-      reviews: store.reviews.filter((r) => r.id !== id),
-    };
-    persistStore(updated, "Reseña eliminada");
-  };
-
-  // Handler for updating Site Images
-  const updateSiteImageField = (key: keyof SiteImagesConfig, val: string) => {
-    setStore({
-      ...store,
-      siteImages: {
-        ...store.siteImages,
-        [key]: val,
-      },
+    const res = await runAdminAction({
+      type: "CLEAR_REQUESTS_HISTORY",
+      mode: clearMode,
+      confirmPending: confirmDeletePending,
     });
+
+    if (res.ok && res.data) {
+      const count = Number(res.data.deletedCount) || 0;
+      setClearHistoryModalOpen(false);
+      setConfirmDeletePending(false);
+      showToast(
+        count === 1
+          ? "Se eliminó 1 solicitud del historial."
+          : `Se eliminaron ${count} solicitudes del historial.`,
+        "ok"
+      );
+    }
   };
 
-  return (
-    <div className="min-h-screen bg-[#F2EFE6] text-[#292D29] flex flex-col">
-      {/* Top Bar */}
-      <header className="bg-[#263D32] text-[#F2EFE6] border-b border-[#899487]/30 py-4 px-4 sm:px-6 lg:px-10 sticky top-0 z-30">
-        <div className="max-w-7xl mx-auto flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div className="flex items-center gap-4">
-            <span className="font-editorial text-2xl sm:text-3xl tracking-[0.22em]">
-              TRAUM
-            </span>
-            <span className="px-2.5 py-1 bg-[#D8CEB9]/15 border border-[#D8CEB9]/40 text-[#D8CEB9] text-[10px] uppercase tracking-[0.2em]">
-              Panel de Administración
-            </span>
-          </div>
+  // =========================================================================
+  // GALERÍA: SUBIDA MÚLTIPLE + OPTIMIZACIÓN AUTOMÁTICA
+  // =========================================================================
+  const handleGalleryFilesSelected = async (
+    files: FileList | File[] | null
+  ) => {
+    if (!files || files.length === 0) return;
+    setUploadingGallery(true);
+    try {
+      const fileArray = Array.from(files);
+      const optimizedItems: Array<{ imageUrl: string; caption?: string }> = [];
 
-          <div className="flex items-center gap-4">
-            {saveMessage && (
-              <div className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#65745A] text-[#F2EFE6] text-xs">
-                <CheckCircle2 className="w-4 h-4 text-[#D8CEB9]" />
-                <span>{saveMessage}</span>
-              </div>
-            )}
+      for (const file of fileArray) {
+        const dataUrl = await optimizeImageFile(file, 1400, 0.82);
+        optimizedItems.push({
+          imageUrl: dataUrl,
+          caption: newGalleryCaption.trim() || undefined,
+        });
+      }
+
+      const res = await runAdminAction(
+        {
+          type: "MANAGE_GALLERY",
+          subAction: "ADD",
+          items: optimizedItems,
+        },
+        optimizedItems.length === 1
+          ? "Se subió y optimizó 1 foto en la galería."
+          : `Se subieron y optimizaron ${optimizedItems.length} fotos en la galería.`
+      );
+
+      if (res.ok && res.data?.store) {
+        setNewGalleryCaption("");
+        const nextCaps: Record<string, string> = {};
+        for (const g of res.data.store.gallery || []) {
+          nextCaps[g.id] = g.caption || "";
+        }
+        setEditingCaptions(nextCaps);
+      }
+    } catch (err) {
+      showToast(
+        err instanceof Error
+          ? err.message
+          : "No se pudieron procesar las imágenes seleccionadas.",
+        "err"
+      );
+    } finally {
+      setUploadingGallery(false);
+    }
+  };
+
+  // =========================================================================
+  // ENVIAR MAIL DE PRUEBA
+  // =========================================================================
+  const handleSendTestEmail = async () => {
+    if (!store) return;
+    setTestingEmail(true);
+    setTestEmailResult(null);
+    try {
+      const res = await fetch("/api/traum", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          type: "SEND_TEST_EMAIL",
+          recipientEmail:
+            testEmailRecipient.trim() ||
+            store.settings.notificationEmail ||
+            store.settings.email,
+          smtpUser: store.settings.smtpUser,
+          smtpAppPassword: store.settings.smtpAppPassword,
+          resendApiKey: store.settings.resendApiKey,
+        }),
+      });
+      const data = await res.json();
+      if (data.store) setStore(data.store);
+      setTestEmailResult({
+        sent: Boolean(data.sent),
+        channel: String(data.channel || ""),
+        errorDetails: data.errorDetails ? String(data.errorDetails) : undefined,
+      });
+      if (data.sent) {
+        showToast(
+          `Correo de prueba enviado con éxito (${data.channel}). Revisá la bandeja de entrada.`,
+          "ok"
+        );
+      } else {
+        showToast(
+          "No se pudo entregar el correo de prueba. Revisá el detalle debajo para cargar tu clave de correo.",
+          "err"
+        );
+      }
+    } catch {
+      showToast("Error al intentar enviar el correo de prueba.", "err");
+    } finally {
+      setTestingEmail(false);
+    }
+  };
+
+  if (loading || !store) {
+    return (
+      <div className="min-h-screen bg-[#263D32] text-[#F2EFE6] flex items-center justify-center">
+        <div className="text-center space-y-3">
+          <div className="w-8 h-8 border-2 border-[#D8CEB9] border-t-transparent rounded-full animate-spin mx-auto" />
+          <p className="text-xs uppercase tracking-[0.25em] text-[#D8CEB9]">
+            Cargando Panel del Guía...
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  // Pantalla de acceso con PIN
+  if (!unlocked) {
+    return (
+      <div className="min-h-screen bg-[#263D32] text-[#F2EFE6] flex items-center justify-center p-4">
+        <div className="max-w-md w-full bg-[#292D29] border border-[#65745A]/40 p-8 shadow-2xl">
+          <div className="w-12 h-12 rounded-full bg-[#65745A]/20 border border-[#D8CEB9]/30 flex items-center justify-center mb-5">
+            <Lock className="w-5 h-5 text-[#D8CEB9]" />
+          </div>
+          <span className="text-xs uppercase tracking-[0.28em] text-[#D8CEB9] block mb-1">
+            TRAUM · Fly Cast Patagonia
+          </span>
+          <h1 className="font-serif text-3xl text-[#F2EFE6] mb-3">
+            Panel del Guía
+          </h1>
+          <p className="text-sm text-[#D8CEB9]/85 mb-6">
+            Ingresá tu clave para administrar salidas, solicitudes y galería.
+          </p>
+
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              if (pinInput === (store.settings.adminPin || "traum2026")) {
+                setUnlocked(true);
+                setPinError(false);
+              } else {
+                setPinError(true);
+              }
+            }}
+            className="space-y-4"
+          >
+            <div>
+              <label className="block text-xs uppercase tracking-wider text-[#D8CEB9] mb-2">
+                Clave de acceso
+              </label>
+              <input
+                type="password"
+                value={pinInput}
+                onChange={(e) => setPinInput(e.target.value)}
+                placeholder="Ingresá tu clave..."
+                className="w-full px-4 py-3.5 bg-[#263D32] border border-[#899487]/40 text-[#F2EFE6] text-base focus:outline-none focus:border-[#D8CEB9]"
+              />
+              {pinError && (
+                <p className="text-xs text-red-300 mt-2">
+                  Clave incorrecta. (Por defecto: <strong>traum2026</strong>)
+                </p>
+              )}
+            </div>
+
+            <button
+              type="submit"
+              className="w-full py-3.5 bg-[#D8CEB9] text-[#263D32] hover:bg-[#F2EFE6] text-xs uppercase tracking-[0.2em] font-bold transition-colors cursor-pointer"
+            >
+              Entrar al Panel
+            </button>
+          </form>
+
+          <div className="mt-6 pt-5 border-t border-[#899487]/20 flex justify-between items-center text-xs text-[#899487]">
             <Link
               href="/"
-              className="px-4 py-2 border border-[#D8CEB9]/50 text-[#F2EFE6] hover:bg-[#D8CEB9] hover:text-[#263D32] text-xs uppercase tracking-[0.18em] transition-colors inline-flex items-center gap-2"
+              className="hover:text-[#F2EFE6] flex items-center gap-1.5"
+            >
+              <ArrowLeft className="w-3.5 h-3.5" />
+              <span>Volver a la web</span>
+            </Link>
+            <span>PIN: {store.settings.adminPin || "traum2026"}</span>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  const allRequests = store.customRequests || [];
+  const pendingRequests = allRequests.filter((r) => r.status === "pendiente");
+  const resolvedRequests = allRequests.filter((r) => r.status !== "pendiente");
+  const sortedGallery = [...(store.gallery || [])].sort(
+    (a, b) => (a.order ?? 0) - (b.order ?? 0)
+  );
+  const modalDateIsBlocked = (store.blockedDays || []).some(
+    (b) => b.date === modalDate
+  );
+  const modalDateDepartures = (store.departures || []).filter(
+    (d) => d.date === modalDate && d.status !== "cancelada"
+  );
+
+  return (
+    <div className="min-h-screen bg-[#F2EFE6] text-[#292D29] pb-20">
+      {/* BARRA SUPERIOR SIMPLE Y MÓVIL-FIRST */}
+      <header className="bg-[#263D32] text-[#F2EFE6] sticky top-0 z-40 shadow-md border-b border-[#65745A]/30">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 py-3.5 flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <Link
+              href="/"
+              className="p-2 bg-[#1D2E26] hover:bg-[#3A4E3C] rounded text-[#D8CEB9] hover:text-white transition-colors"
+              title="Ver página web pública"
             >
               <ArrowLeft className="w-4 h-4" />
-              <span>Ver sitio público</span>
             </Link>
+            <div>
+              <span className="font-serif text-lg sm:text-xl tracking-widest uppercase block leading-none">
+                TRAUM · Panel del Guía
+              </span>
+              <span className="text-[11px] text-[#D8CEB9] block mt-0.5">
+                Gestión rápida en 2 clics
+              </span>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                openCreateModalForDate(todayAR);
+              }}
+              className="px-3.5 py-2 bg-[#D8CEB9] text-[#263D32] hover:bg-white text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 rounded-sm shadow-sm cursor-pointer"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Nueva salida</span>
+            </button>
           </div>
         </div>
       </header>
 
-      <div className="max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-10 py-6 sm:py-10 flex-1">
-        {/* Navigation Tabs */}
-        <div className="flex flex-wrap gap-2 pb-8 mb-8 border-b border-[#D8CEB9]">
+      {/* AVISO FLOTANTE DE ÉXITO O ERROR */}
+      {bannerMsg && (
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 mt-4">
+          <div
+            className={`p-4 border flex items-center justify-between gap-3 shadow-sm ${
+              bannerMsg.type === "ok"
+                ? "bg-[#263D32] text-[#F2EFE6] border-[#65745A]"
+                : "bg-red-900 text-white border-red-700"
+            }`}
+          >
+            <div className="flex items-center gap-2.5 text-sm font-medium">
+              {bannerMsg.type === "ok" ? (
+                <CheckCircle2 className="w-5 h-5 text-[#D8CEB9] flex-shrink-0" />
+              ) : (
+                <AlertTriangle className="w-5 h-5 text-red-200 flex-shrink-0" />
+              )}
+              <span>{bannerMsg.text}</span>
+            </div>
+            <button
+              type="button"
+              onClick={() => setBannerMsg(null)}
+              className="text-xs uppercase tracking-wider opacity-80 hover:opacity-100"
+            >
+              Cerrar
+            </button>
+          </div>
+        </div>
+      )}
+
+      <main className="max-w-6xl mx-auto px-4 sm:px-6 pt-6 space-y-6">
+        {/* 1. RESUMEN ARRIBA (SOLICITUDES PENDIENTES, PRÓXIMAS SALIDAS, ANOTADOS DE HOY) */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
           <button
             type="button"
-            onClick={() => setActiveTab("departures")}
-            className={`px-4 py-3 text-xs uppercase tracking-[0.18em] font-semibold flex items-center gap-2 transition-colors cursor-pointer ${
-              activeTab === "departures"
-                ? "bg-[#263D32] text-[#F2EFE6]"
-                : "bg-white text-[#292D29] border border-[#D8CEB9] hover:bg-[#D8CEB9]/40"
+            onClick={() => setActiveTab("solicitudes")}
+            className={`p-4 sm:p-5 text-left border transition-all cursor-pointer flex items-center justify-between ${
+              summaryStats.pendingRequestsCount > 0
+                ? "bg-amber-50 border-amber-400 hover:bg-amber-100/70"
+                : "bg-white border-[#D8CEB9] hover:border-[#263D32]"
+            }`}
+          >
+            <div>
+              <span className="text-xs uppercase tracking-wider text-[#746657] font-semibold block">
+                Solicitudes pendientes
+              </span>
+              <span className="font-serif text-3xl sm:text-4xl text-[#263D32] font-bold mt-1 block">
+                {summaryStats.pendingRequestsCount}
+              </span>
+              <span className="text-xs text-[#65745A] mt-1 block">
+                {summaryStats.pendingRequestsCount > 0
+                  ? "Tocar para responder ahora →"
+                  : "Todo al día"}
+              </span>
+            </div>
+            <div
+              className={`w-12 h-12 rounded-full flex items-center justify-center ${
+                summaryStats.pendingRequestsCount > 0
+                  ? "bg-amber-500 text-white"
+                  : "bg-[#F2EFE6] text-[#263D32]"
+              }`}
+            >
+              <Inbox className="w-6 h-6" />
+            </div>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              setActiveTab("calendario");
+              setDepartureFilter("proximas");
+            }}
+            className="p-4 sm:p-5 text-left bg-white border border-[#D8CEB9] hover:border-[#263D32] transition-all cursor-pointer flex items-center justify-between"
+          >
+            <div>
+              <span className="text-xs uppercase tracking-wider text-[#746657] font-semibold block">
+                Próximas salidas
+              </span>
+              <span className="font-serif text-3xl sm:text-4xl text-[#263D32] font-bold mt-1 block">
+                {summaryStats.upcomingDeparturesCount}
+              </span>
+              <span className="text-xs text-[#65745A] mt-1 block">
+                Salidas programadas activas
+              </span>
+            </div>
+            <div className="w-12 h-12 rounded-full bg-[#F2EFE6] text-[#263D32] flex items-center justify-center">
+              <Calendar className="w-6 h-6" />
+            </div>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveTab("calendario")}
+            className="p-4 sm:p-5 text-left bg-white border border-[#D8CEB9] hover:border-[#263D32] transition-all cursor-pointer flex items-center justify-between"
+          >
+            <div>
+              <span className="text-xs uppercase tracking-wider text-[#746657] font-semibold block">
+                Anotados de hoy ({todayAR.slice(5)})
+              </span>
+              <span className="font-serif text-3xl sm:text-4xl text-[#263D32] font-bold mt-1 block">
+                {summaryStats.todayEnrolledPeopleCount}
+              </span>
+              <span className="text-xs text-[#65745A] mt-1 block">
+                Pescadores confirmados hoy
+              </span>
+            </div>
+            <div className="w-12 h-12 rounded-full bg-[#F2EFE6] text-[#263D32] flex items-center justify-center">
+              <Users className="w-6 h-6" />
+            </div>
+          </button>
+        </div>
+
+        {/* BARRA DE PESTAÑAS GRANDES Y CLARAS (4 SECCIONES) */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 bg-[#E5DEC9] p-1.5 border border-[#D8CEB9]">
+          <button
+            type="button"
+            onClick={() => setActiveTab("calendario")}
+            className={`py-3 px-3 text-xs sm:text-sm font-bold uppercase tracking-wider flex items-center justify-center gap-2 transition-colors cursor-pointer ${
+              activeTab === "calendario"
+                ? "bg-[#263D32] text-[#F2EFE6] shadow-sm"
+                : "bg-transparent text-[#292D29] hover:bg-white/60"
             }`}
           >
             <Calendar className="w-4 h-4" />
-            <span>Calendario ({store.departures.length})</span>
+            <span>1. Calendario y Salidas</span>
           </button>
 
           <button
             type="button"
-            onClick={() => setActiveTab("images")}
-            className={`px-4 py-3 text-xs uppercase tracking-[0.18em] font-semibold flex items-center gap-2 transition-colors cursor-pointer ${
-              activeTab === "images"
-                ? "bg-[#263D32] text-[#F2EFE6]"
-                : "bg-white text-[#292D29] border border-[#D8CEB9] hover:bg-[#D8CEB9]/40"
-            }`}
-          >
-            <ImageIcon className="w-4 h-4" />
-            <span>Imágenes de la Web</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setActiveTab("destinations")}
-            className={`px-4 py-3 text-xs uppercase tracking-[0.18em] font-semibold flex items-center gap-2 transition-colors cursor-pointer ${
-              activeTab === "destinations"
-                ? "bg-[#263D32] text-[#F2EFE6]"
-                : "bg-white text-[#292D29] border border-[#D8CEB9] hover:bg-[#D8CEB9]/40"
-            }`}
-          >
-            <MapPin className="w-4 h-4" />
-            <span>Destinos y Mapa ({store.destinations.length})</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setActiveTab("services")}
-            className={`px-4 py-3 text-xs uppercase tracking-[0.18em] font-semibold flex items-center gap-2 transition-colors cursor-pointer ${
-              activeTab === "services"
-                ? "bg-[#263D32] text-[#F2EFE6]"
-                : "bg-white text-[#292D29] border border-[#D8CEB9] hover:bg-[#D8CEB9]/40"
-            }`}
-          >
-            <CreditCard className="w-4 h-4" />
-            <span>Servicios y Medios de Pago</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setActiveTab("reviews")}
-            className={`px-4 py-3 text-xs uppercase tracking-[0.18em] font-semibold flex items-center gap-2 transition-colors cursor-pointer ${
-              activeTab === "reviews"
-                ? "bg-[#263D32] text-[#F2EFE6]"
-                : "bg-white text-[#292D29] border border-[#D8CEB9] hover:bg-[#D8CEB9]/40"
-            }`}
-          >
-            <MessageSquare className="w-4 h-4" />
-            <span>Reseñas ({store.reviews.length})</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setActiveTab("inquiries")}
-            className={`px-4 py-3 text-xs uppercase tracking-[0.18em] font-semibold flex items-center gap-2 transition-colors cursor-pointer ${
-              activeTab === "inquiries"
-                ? "bg-[#263D32] text-[#F2EFE6]"
-                : "bg-white text-[#292D29] border border-[#D8CEB9] hover:bg-[#D8CEB9]/40"
+            onClick={() => setActiveTab("solicitudes")}
+            className={`py-3 px-3 text-xs sm:text-sm font-bold uppercase tracking-wider flex items-center justify-center gap-2 transition-colors cursor-pointer ${
+              activeTab === "solicitudes"
+                ? "bg-[#263D32] text-[#F2EFE6] shadow-sm"
+                : "bg-transparent text-[#292D29] hover:bg-white/60"
             }`}
           >
             <Inbox className="w-4 h-4" />
-            <span>
-              Solicitudes a Pedido ({(store.customRequests || []).length})
-            </span>
-            {(store.customRequests || []).filter(
-              (r) => r.status === "pendiente"
-            ).length > 0 && (
-              <span className="px-2 py-0.5 bg-[#B35B2B] text-white text-[10px] font-bold rounded-full">
-                {
-                  (store.customRequests || []).filter(
-                    (r) => r.status === "pendiente"
-                  ).length
-                }{" "}
-                pend.
+            <span>2. Solicitudes ({allRequests.length})</span>
+            {pendingRequests.length > 0 && (
+              <span className="px-1.5 py-0.5 text-[11px] bg-amber-500 text-white rounded-full">
+                {pendingRequests.length}
               </span>
             )}
           </button>
 
           <button
             type="button"
-            onClick={() => setActiveTab("legal_cookies")}
-            className={`px-4 py-3 text-xs uppercase tracking-[0.18em] font-semibold flex items-center gap-2 transition-colors cursor-pointer ${
-              activeTab === "legal_cookies"
-                ? "bg-[#263D32] text-[#F2EFE6]"
-                : "bg-white text-[#292D29] border border-[#D8CEB9] hover:bg-[#D8CEB9]/40"
+            onClick={() => setActiveTab("galeria")}
+            className={`py-3 px-3 text-xs sm:text-sm font-bold uppercase tracking-wider flex items-center justify-center gap-2 transition-colors cursor-pointer ${
+              activeTab === "galeria"
+                ? "bg-[#263D32] text-[#F2EFE6] shadow-sm"
+                : "bg-transparent text-[#292D29] hover:bg-white/60"
             }`}
           >
-            <Sliders className="w-4 h-4" />
-            <span>
-              Cookies y Legal ({(store.cookieConsents || []).length})
-            </span>
+            <ImageIcon className="w-4 h-4" />
+            <span>3. Galería ({sortedGallery.length})</span>
           </button>
 
           <button
             type="button"
-            onClick={() => setActiveTab("settings")}
-            className={`px-4 py-3 text-xs uppercase tracking-[0.18em] font-semibold flex items-center gap-2 transition-colors cursor-pointer ${
-              activeTab === "settings"
-                ? "bg-[#263D32] text-[#F2EFE6]"
-                : "bg-white text-[#292D29] border border-[#D8CEB9] hover:bg-[#D8CEB9]/40"
+            onClick={() => setActiveTab("ajustes")}
+            className={`py-3 px-3 text-xs sm:text-sm font-bold uppercase tracking-wider flex items-center justify-center gap-2 transition-colors cursor-pointer ${
+              activeTab === "ajustes"
+                ? "bg-[#263D32] text-[#F2EFE6] shadow-sm"
+                : "bg-transparent text-[#292D29] hover:bg-white/60"
             }`}
           >
             <Settings className="w-4 h-4" />
-            <span>Contacto, Mail y Google</span>
+            <span>4. Correo y Ajustes</span>
           </button>
         </div>
 
-        {/* TAB: DEPARTURES, CALENDAR, WAITLIST & BLOCKED DAYS */}
-        {activeTab === "departures" && (
+        {/* ================================================================= */}
+        {/* PESTAÑA 1: CALENDARIO GRANDE + SALIDAS CON ACCIONES VISIBLES      */}
+        {/* ================================================================= */}
+        {activeTab === "calendario" && (
           <div className="space-y-8">
-            {/* ALERTAS DE LISTA DE ESPERA ACTIVAS */}
-            {(store.waitlistAlerts || []).filter((a) => !a.resolved).length >
-              0 && (
-              <div className="bg-amber-50 border-2 border-amber-500 p-5 space-y-3">
-                <div className="flex items-center gap-2 text-amber-900 font-semibold text-xs uppercase tracking-[0.2em]">
-                  <BellRing className="w-4 h-4 text-amber-700" />
-                  <span>
-                    Avisos de Lista de Espera (Cupos liberados para promover)
-                  </span>
-                </div>
-                {(store.waitlistAlerts || [])
-                  .filter((a) => !a.resolved)
-                  .map((alert) => (
-                    <div
-                      key={alert.id}
-                      className="p-4 bg-white border border-amber-300 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs"
-                    >
-                      <div>
-                        Se liberó lugar en{" "}
-                        <strong>
-                          {alert.destination} ({alert.departureDate})
-                        </strong>{" "}
-                        por baja de {alert.cancelledEnrollmentName}. Primero en
-                        lista de espera:{" "}
-                        <strong className="text-[#263D32]">
-                          {alert.nextWaitlistName} ({alert.nextWaitlistCount}{" "}
-                          pers. · {alert.nextWaitlistPhone})
-                        </strong>
-                        .
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <button
-                          type="button"
-                          onClick={() =>
-                            handlePromoteFromWaitlist(
-                              alert.nextWaitlistEnrollmentId
-                            )
-                          }
-                          className="px-3.5 py-2 bg-[#263D32] text-[#F2EFE6] hover:bg-[#65745A] text-[10px] uppercase tracking-wider font-semibold cursor-pointer"
-                        >
-                          Promover a Confirmada (1 clic)
-                        </button>
-                        <a
-                          href={buildWaUrl(
-                            alert.nextWaitlistPhone,
-                            `Hola ${alert.nextWaitlistName}, te escribimos de TRAUM Fly Cast Patagonia porque se liberó lugar en la salida del ${alert.departureDate} (${alert.destination}). ¡Te confirmamos tu cupo!`
-                          )}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="px-3 py-2 bg-emerald-700 text-white text-[10px] uppercase tracking-wider font-semibold inline-flex items-center gap-1"
-                        >
-                          <span>Avisar WhatsApp</span>
-                          <ExternalLink className="w-3 h-3" />
-                        </a>
-                      </div>
-                    </div>
-                  ))}
-              </div>
-            )}
-
-            {/* VISTA DE CALENDARIO DEL GUÍA + BLOQUEO DE DÍAS + EXPORTACIÓN CSV */}
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-              {/* Calendario Mensual Visual del Guía (7 cols) */}
-              <div className="lg:col-span-7 bg-white border border-[#D8CEB9] p-6">
-                <div className="flex items-center justify-between pb-4 mb-4 border-b border-[#D8CEB9]">
-                  <div>
-                    <span className="text-[10px] uppercase tracking-[0.2em] text-[#65745A] font-semibold block">
-                      Vista General del Guía (Salidas, Anotados, Bloqueos y Solicitudes)
-                    </span>
-                    <h3 className="font-editorial text-2xl text-[#263D32]">
-                      {ADMIN_MONTH_NAMES[adminCalMonth]} {adminCalYear}
-                    </h3>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (adminCalMonth === 0) {
-                          setAdminCalMonth(11);
-                          setAdminCalYear((y) => y - 1);
-                        } else {
-                          setAdminCalMonth((m) => m - 1);
-                        }
-                      }}
-                      className="w-9 h-9 border border-[#D8CEB9] hover:bg-[#263D32] hover:text-[#F2EFE6] flex items-center justify-center cursor-pointer"
-                    >
-                      <ChevronLeft className="w-4 h-4" />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (adminCalMonth === 11) {
-                          setAdminCalMonth(0);
-                          setAdminCalYear((y) => y + 1);
-                        } else {
-                          setAdminCalMonth((m) => m + 1);
-                        }
-                      }}
-                      className="w-9 h-9 border border-[#D8CEB9] hover:bg-[#263D32] hover:text-[#F2EFE6] flex items-center justify-center cursor-pointer"
-                    >
-                      <ChevronRight className="w-4 h-4" />
-                    </button>
-                  </div>
+            {/* CALENDARIO GRANDE: TOCAR UN DÍA ABRE EL MODAL DE CREACIÓN RÁPIDA */}
+            <div className="bg-white border border-[#D8CEB9] p-4 sm:p-6 shadow-sm">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 mb-4 border-b border-[#D8CEB9]">
+                <div>
+                  <h2 className="font-serif text-2xl sm:text-3xl text-[#263D32]">
+                    Calendario de Salidas
+                  </h2>
+                  <p className="text-xs sm:text-sm text-[#746657] mt-0.5">
+                    <strong>Regla de 2 clics:</strong> Tocá cualquier día del
+                    calendario para crear una salida o bloquear la fecha.
+                  </p>
                 </div>
 
-                <div className="grid grid-cols-7 gap-1 text-center mb-2">
-                  {ADMIN_WEEKDAYS.map((w) => (
-                    <div
-                      key={w}
-                      className="text-[10px] uppercase tracking-wider text-[#746657] font-semibold py-1"
-                    >
-                      {w}
-                    </div>
-                  ))}
-                </div>
-
-                <div className="grid grid-cols-7 gap-1">
-                  {(() => {
-                    const firstDay = new Date(adminCalYear, adminCalMonth, 1);
-                    const totalDays = new Date(
-                      adminCalYear,
-                      adminCalMonth + 1,
-                      0
-                    ).getDate();
-                    const offset = (firstDay.getDay() + 6) % 7;
-                    const cells: Array<{
-                      day: number | null;
-                      dateStr: string | null;
-                    }> = [];
-                    for (let i = 0; i < offset; i++)
-                      cells.push({ day: null, dateStr: null });
-                    for (let d = 1; d <= totalDays; d++) {
-                      const mPad = String(adminCalMonth + 1).padStart(2, "0");
-                      const dPad = String(d).padStart(2, "0");
-                      cells.push({
-                        day: d,
-                        dateStr: `${adminCalYear}-${mPad}-${dPad}`,
-                      });
-                    }
-                    return cells.map((c, idx) => {
-                      if (!c.day || !c.dateStr) {
-                        return (
-                          <div
-                            key={`adm-empty-${idx}`}
-                            className="h-16 bg-[#F2EFE6]/30"
-                          />
-                        );
+                <div className="flex items-center justify-between sm:justify-end gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (calMonth === 0) {
+                        setCalMonth(11);
+                        setCalYear((y) => y - 1);
+                      } else {
+                        setCalMonth((m) => m - 1);
                       }
-                      const dt = c.dateStr;
-                      const isBlk = (store.blockedDays || []).some(
-                        (b) => b.date === dt
-                      );
-                      const deps = (store.departures || []).filter(
-                        (d) => d.date === dt && d.status !== "cancelada"
-                      );
-                      const pendReqs = (store.customRequests || []).filter(
-                        (r) => r.desiredDate === dt && r.status === "pendiente"
-                      );
-                      const confirmedCount = (store.enrollments || [])
-                        .filter(
-                          (e) =>
-                            deps.some((d) => d.id === e.departureId) &&
-                            e.status === "confirmada"
-                        )
-                        .reduce((acc, e) => acc + e.participantsCount, 0);
-
-                      return (
-                        <div
-                          key={dt}
-                          onClick={() => {
-                            setNewDepDate(dt);
-                            setBlockDateInput(dt);
-                          }}
-                          className={`h-16 p-1.5 border text-left flex flex-col justify-between cursor-pointer transition-colors ${
-                            isBlk
-                              ? "bg-red-50 border-red-300 text-red-900"
-                              : deps.length > 0
-                              ? "bg-emerald-50 border-emerald-600/50 text-[#263D32]"
-                              : pendReqs.length > 0
-                              ? "bg-amber-50 border-amber-500/60"
-                              : "bg-[#F2EFE6]/40 border-[#D8CEB9] hover:border-[#263D32]"
-                          }`}
-                        >
-                          <div className="flex items-center justify-between">
-                            <span
-                              className={`text-xs font-semibold ${
-                                isBlk ? "line-through" : ""
-                              }`}
-                            >
-                              {c.day}
-                            </span>
-                            {pendReqs.length > 0 && (
-                              <span
-                                title={`${pendReqs.length} solicitud(es) pendiente(s)`}
-                                className="px-1.5 py-0.2 bg-[#B35B2B] text-white text-[9px] font-bold rounded-full"
-                              >
-                                {pendReqs.length} sol.
-                              </span>
-                            )}
-                          </div>
-                          <div className="text-[9px] leading-tight truncate">
-                            {isBlk ? (
-                              <span className="text-red-700 font-semibold">
-                                Bloqueado
-                              </span>
-                            ) : deps.length > 0 ? (
-                              <span className="font-semibold text-emerald-900">
-                                {deps.length} sal. ({confirmedCount} anot.)
-                              </span>
-                            ) : (
-                              <span className="text-[#746657]">Libre</span>
-                            )}
-                          </div>
-                        </div>
-                      );
-                    });
-                  })()}
-                </div>
-              </div>
-
-              {/* Bloquear / Desbloquear Días + Exportar Anotados CSV (5 cols) */}
-              <div className="lg:col-span-5 space-y-6">
-                <div className="bg-white border border-[#D8CEB9] p-6 space-y-4">
-                  <h4 className="font-editorial text-2xl text-[#263D32] pb-2 border-b border-[#D8CEB9]">
-                    Bloquear / Desbloquear Días
-                  </h4>
-                  <p className="text-xs text-[#746657]">
-                    En los días bloqueados no se permite anotarse ni enviar
-                    solicitudes de salidas a pedido.
-                  </p>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <div>
-                      <label className="block text-[10px] uppercase tracking-[0.18em] font-semibold mb-1">
-                        Fecha a bloquear/desbloquear
-                      </label>
-                      <input
-                        type="date"
-                        value={blockDateInput}
-                        onChange={(e) => setBlockDateInput(e.target.value)}
-                        className="w-full px-3 py-2 border border-[#D8CEB9] text-xs"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-[10px] uppercase tracking-[0.18em] font-semibold mb-1">
-                        Motivo (Opcional)
-                      </label>
-                      <input
-                        type="text"
-                        value={blockReasonInput}
-                        onChange={(e) => setBlockReasonInput(e.target.value)}
-                        placeholder="Ej. Descanso / Mantenimiento"
-                        className="w-full px-3 py-2 border border-[#D8CEB9] text-xs"
-                      />
-                    </div>
-                  </div>
+                    }}
+                    className="p-2.5 border border-[#D8CEB9] hover:bg-[#F2EFE6] cursor-pointer"
+                    aria-label="Mes anterior"
+                  >
+                    <ChevronLeft className="w-5 h-5 text-[#263D32]" />
+                  </button>
+                  <span className="font-serif text-lg sm:text-xl text-[#263D32] min-w-[165px] text-center font-bold">
+                    {ADMIN_MONTH_NAMES[calMonth]} {calYear}
+                  </span>
                   <button
                     type="button"
-                    disabled={saving}
-                    onClick={() =>
-                      handleToggleBlockDay(blockDateInput, blockReasonInput)
-                    }
-                    className="w-full py-2.5 bg-[#263D32] text-[#F2EFE6] hover:bg-[#65745A] text-xs uppercase tracking-[0.18em] font-semibold flex items-center justify-center gap-2 cursor-pointer"
+                    onClick={() => {
+                      if (calMonth === 11) {
+                        setCalMonth(0);
+                        setCalYear((y) => y + 1);
+                      } else {
+                        setCalMonth((m) => m + 1);
+                      }
+                    }}
+                    className="p-2.5 border border-[#D8CEB9] hover:bg-[#F2EFE6] cursor-pointer"
+                    aria-label="Mes siguiente"
                   >
-                    <Ban className="w-3.5 h-3.5" />
-                    <span>Bloquear / Desbloquear fecha</span>
-                  </button>
-
-                  {(store.blockedDays || []).length > 0 && (
-                    <div className="pt-3 border-t border-[#D8CEB9] space-y-2 max-h-40 overflow-y-auto">
-                      <span className="text-[10px] uppercase tracking-[0.18em] text-[#746657] font-semibold block">
-                        Días actualmente bloqueados ({(store.blockedDays || []).length}):
-                      </span>
-                      {(store.blockedDays || []).map((b) => (
-                        <div
-                          key={b.date}
-                          className="p-2 bg-[#F2EFE6]/70 border border-[#D8CEB9] flex items-center justify-between text-xs"
-                        >
-                          <span>
-                            <strong>{b.date}</strong>{" "}
-                            {b.reason ? `— ${b.reason}` : ""}
-                          </span>
-                          <button
-                            type="button"
-                            onClick={() => handleToggleBlockDay(b.date)}
-                            className="text-red-700 hover:underline text-[11px] font-semibold cursor-pointer"
-                          >
-                            Desbloquear
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-
-                {/* Exportar anotados a CSV */}
-                <div className="bg-white border border-[#D8CEB9] p-6 space-y-3">
-                  <h4 className="font-editorial text-xl text-[#263D32]">
-                    Exportar Padrón de Anotados (CSV)
-                  </h4>
-                  <p className="text-xs text-[#746657]">
-                    Descargá una planilla CSV compatible con Excel con todas las
-                    anotaciones confirmadas y en lista de espera.
-                  </p>
-                  <button
-                    type="button"
-                    onClick={() => handleExportEnrollmentsCsv()}
-                    className="w-full py-3 bg-[#D8CEB9] text-[#263D32] hover:bg-[#263D32] hover:text-[#F2EFE6] text-xs uppercase tracking-[0.2em] font-semibold flex items-center justify-center gap-2 transition-colors cursor-pointer"
-                  >
-                    <Download className="w-4 h-4" />
-                    <span>
-                      Exportar todos los anotados a CSV (
-                      {(store.enrollments || []).length})
-                    </span>
+                    <ChevronRight className="w-5 h-5 text-[#263D32]" />
                   </button>
                 </div>
               </div>
-            </div>
 
-            {/* CREAR SALIDA PROGRAMADA + LISTADO DE SALIDAS CON ANOTADOS */}
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-              <div className="lg:col-span-5 bg-white border border-[#D8CEB9] p-6 sm:p-8">
-                <h3 className="font-editorial text-2xl text-[#263D32] mb-6 pb-3 border-b border-[#D8CEB9]">
-                  Programar nueva salida
-                </h3>
-                <form onSubmit={handleAddDeparture} className="space-y-4">
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                    <div>
-                      <label className="block text-[10px] uppercase tracking-[0.2em] font-semibold mb-1">
-                        Fecha *
-                      </label>
-                      <input
-                        type="date"
-                        required
-                        value={newDepDate}
-                        onChange={(e) => setNewDepDate(e.target.value)}
-                        className="w-full px-3 py-2 border border-[#D8CEB9] text-xs"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-[10px] uppercase tracking-[0.2em] font-semibold mb-1">
-                        Hora inicio *
-                      </label>
-                      <input
-                        type="time"
-                        required
-                        value={newDepStartTime}
-                        onChange={(e) => setNewDepStartTime(e.target.value)}
-                        className="w-full px-3 py-2 border border-[#D8CEB9] text-xs"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-[10px] uppercase tracking-[0.2em] font-semibold mb-1">
-                        Hora fin (Opc.)
-                      </label>
-                      <input
-                        type="time"
-                        value={newDepEndTime}
-                        onChange={(e) => setNewDepEndTime(e.target.value)}
-                        className="w-full px-3 py-2 border border-[#D8CEB9] text-xs"
-                      />
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="block text-[10px] uppercase tracking-[0.2em] font-semibold mb-1">
-                      Río / Destino *
-                    </label>
-                    <input
-                      type="text"
-                      required
-                      value={newDepDestination}
-                      onChange={(e) => setNewDepDestination(e.target.value)}
-                      placeholder="Ej. Río Chimehuín — Garganta del Diablo"
-                      className="w-full px-3 py-2 border border-[#D8CEB9] text-sm"
-                    />
-                  </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <div>
-                      <label className="block text-[10px] uppercase tracking-[0.2em] font-semibold mb-1">
-                        Tipo de pesca *
-                      </label>
-                      <select
-                        value={newDepExperience}
-                        onChange={(e) =>
-                          setNewDepExperience(
-                            e.target.value as ExperienceModality
-                          )
-                        }
-                        className="w-full px-3 py-2 border border-[#D8CEB9] text-sm"
-                      >
-                        <option value="Pesca de vadeo">Pesca de vadeo</option>
-                        <option value="Pesca en balsa">Pesca en balsa</option>
-                        <option value="Salida personalizada">
-                          Salida personalizada
-                        </option>
-                      </select>
-                    </div>
-                    <div>
-                      <label className="block text-[10px] uppercase tracking-[0.2em] font-semibold mb-1">
-                        Cupos totales *
-                      </label>
-                      <input
-                        type="number"
-                        min={1}
-                        max={20}
-                        value={newDepMax}
-                        onChange={(e) => setNewDepMax(Number(e.target.value))}
-                        className="w-full px-3 py-2 border border-[#D8CEB9] text-sm"
-                      />
-                    </div>
-                  </div>
-
-                  {/* Opción Recurrente */}
-                  <div className="p-3 bg-[#F2EFE6]/60 border border-[#D8CEB9] grid grid-cols-1 sm:grid-cols-2 gap-3">
-                    <div>
-                      <label className="block text-[10px] uppercase tracking-[0.18em] font-semibold mb-1">
-                        Repetición (Opcional)
-                      </label>
-                      <select
-                        value={newDepRepeatMode}
-                        onChange={(e) =>
-                          setNewDepRepeatMode(
-                            e.target.value as "none" | "daily" | "weekly"
-                          )
-                        }
-                        className="w-full px-2.5 py-2 bg-white border border-[#D8CEB9] text-xs"
-                      >
-                        <option value="none">Salida única (Sin repetir)</option>
-                        <option value="weekly">Repetir cada semana</option>
-                        <option value="daily">Repetir días seguidos</option>
-                      </select>
-                    </div>
-                    {newDepRepeatMode !== "none" && (
-                      <div>
-                        <label className="block text-[10px] uppercase tracking-[0.18em] font-semibold mb-1">
-                          Cantidad de repeticiones
-                        </label>
-                        <input
-                          type="number"
-                          min={2}
-                          max={12}
-                          value={newDepRepeatCount}
-                          onChange={(e) =>
-                            setNewDepRepeatCount(Number(e.target.value))
-                          }
-                          className="w-full px-2.5 py-2 bg-white border border-[#D8CEB9] text-xs"
-                        />
-                      </div>
-                    )}
-                  </div>
-
-                  <div>
-                    <label className="block text-[10px] uppercase tracking-[0.2em] font-semibold mb-1">
-                      Notas de la salida
-                    </label>
-                    <textarea
-                      rows={3}
-                      value={newDepInfo}
-                      onChange={(e) => setNewDepInfo(e.target.value)}
-                      placeholder="Detalles técnicos, recomendaciones o puntos de encuentro..."
-                      className="w-full px-3 py-2 border border-[#D8CEB9] text-sm"
-                    />
-                  </div>
-
-                  <button
-                    type="submit"
-                    disabled={saving}
-                    className="w-full py-3 bg-[#263D32] text-[#F2EFE6] hover:bg-[#65745A] text-xs uppercase tracking-[0.2em] font-semibold flex items-center justify-center gap-2 cursor-pointer"
+              {/* Encabezado de días */}
+              <div className="grid grid-cols-7 gap-1 sm:gap-2 mb-2 text-center">
+                {ADMIN_WEEKDAYS.map((wd) => (
+                  <div
+                    key={wd}
+                    className="text-[11px] font-bold uppercase tracking-wider text-[#746657] py-1"
                   >
-                    <Plus className="w-4 h-4" />
-                    <span>Agregar salida al calendario</span>
-                  </button>
-                </form>
+                    {wd}
+                  </div>
+                ))}
               </div>
 
-              <div className="lg:col-span-7 space-y-4">
-                <h3 className="font-editorial text-2xl text-[#263D32] mb-2">
-                  Salidas programadas ({store.departures.length})
-                </h3>
-                {store.departures.map((dep) => {
-                  const depEnrollments = (store.enrollments || []).filter(
-                    (e) => e.departureId === dep.id && e.status !== "cancelada"
+              {/* Grilla de días */}
+              <div className="grid grid-cols-7 gap-1.5 sm:gap-2">
+                {calendarCells.map((cell, idx) => {
+                  if (!cell.day || !cell.dateStr) {
+                    return (
+                      <div
+                        key={`empty-${idx}`}
+                        className="min-h-[76px] sm:min-h-[104px] bg-[#F2EFE6]/40 border border-transparent"
+                      />
+                    );
+                  }
+                  const dStr = cell.dateStr;
+                  const isToday = dStr === todayAR;
+                  const isBlocked = (store.blockedDays || []).some(
+                    (b) => b.date === dStr
                   );
-                  const isCancelled = dep.status === "cancelada";
-                  const isEditing = editingDepId === dep.id;
+                  const dayDeps = (store.departures || []).filter(
+                    (d) => d.date === dStr && d.status !== "cancelada"
+                  );
+                  const dayReqs = (store.customRequests || []).filter(
+                    (r) =>
+                      (r.desiredDate === dStr || r.alternativeDate === dStr) &&
+                      r.status === "pendiente"
+                  );
 
                   return (
-                    <div
-                      key={dep.id}
-                      className={`bg-white border p-5 space-y-4 ${
-                        isCancelled
-                          ? "border-red-300 bg-red-50/30 opacity-80"
-                          : "border-[#D8CEB9]"
+                    <button
+                      key={dStr}
+                      type="button"
+                      onClick={() => openCreateModalForDate(dStr)}
+                      className={`min-h-[76px] sm:min-h-[104px] p-1.5 sm:p-2.5 border text-left flex flex-col justify-between transition-all cursor-pointer group ${
+                        isBlocked
+                          ? "bg-stone-200/80 border-stone-400 text-stone-600"
+                          : dayDeps.length > 0
+                          ? "bg-[#263D32]/10 border-[#263D32] hover:bg-[#263D32]/15"
+                          : dayReqs.length > 0
+                          ? "bg-amber-50 border-amber-400 hover:bg-amber-100"
+                          : "bg-white border-[#D8CEB9] hover:border-[#263D32] hover:bg-[#F2EFE6]/60"
                       }`}
                     >
-                      <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
-                        <div className="space-y-1">
-                          <div className="flex flex-wrap items-center gap-2">
-                            <span className="px-2.5 py-0.5 bg-[#263D32] text-[#F2EFE6] text-xs font-medium">
-                              {dep.date} · {dep.startTime || "08:00"}
-                              {dep.endTime ? ` a ${dep.endTime} hs` : " hs"}
-                            </span>
-                            <span className="text-xs uppercase tracking-wider text-[#65745A] font-semibold">
-                              {dep.experienceType}
-                            </span>
-                            <span
-                              className={`px-2 py-0.5 text-[11px] font-semibold ${
-                                isCancelled
-                                  ? "bg-red-800 text-white"
-                                  : dep.availableSpots === 0
-                                  ? "bg-red-100 text-red-800"
-                                  : "bg-[#D8CEB9]/60 text-[#263D32]"
-                              }`}
-                            >
-                              {isCancelled
-                                ? "ESTADO: CANCELADA"
-                                : `Cupos disponibles: ${dep.availableSpots} de ${dep.maxParticipants}`}
-                            </span>
-                          </div>
-                          <h4 className="font-editorial text-2xl text-[#263D32]">
-                            {dep.destination}
-                          </h4>
-                          {dep.additionalInfo && (
-                            <p className="text-xs text-[#292D29]/75 pt-1">
-                              {dep.additionalInfo}
-                            </p>
-                          )}
-                        </div>
-
-                        <div className="flex flex-wrap items-center gap-1.5">
-                          <button
-                            type="button"
-                            title="Editar salida"
-                            onClick={() => {
-                              if (isEditing) {
-                                setEditingDepId(null);
-                              } else {
-                                setEditingDepId(dep.id);
-                                setEditDepDate(dep.date);
-                                setEditDepStartTime(dep.startTime || "08:00");
-                                setEditDepEndTime(dep.endTime || "17:30");
-                                setEditDepDestination(dep.destination);
-                                setEditDepExperience(dep.experienceType);
-                                setEditDepMax(dep.maxParticipants);
-                                setEditDepInfo(dep.additionalInfo || "");
-                              }
-                            }}
-                            className="px-2.5 py-1.5 text-xs border border-[#D8CEB9] hover:border-[#263D32] text-[#263D32] inline-flex items-center gap-1 cursor-pointer"
-                          >
-                            <Edit3 className="w-3.5 h-3.5" />
-                            <span>Editar</span>
-                          </button>
-
-                          <button
-                            type="button"
-                            title="Duplicar salida (+7 días)"
-                            onClick={() => handleDuplicateDeparture(dep)}
-                            className="px-2.5 py-1.5 text-xs border border-[#D8CEB9] hover:border-[#263D32] text-[#263D32] inline-flex items-center gap-1 cursor-pointer"
-                          >
-                            <Copy className="w-3.5 h-3.5" />
-                            <span>Duplicar</span>
-                          </button>
-
-                          <button
-                            type="button"
-                            title="Exportar anotados de esta salida a CSV"
-                            onClick={() => handleExportEnrollmentsCsv(dep.id)}
-                            className="px-2.5 py-1.5 text-xs border border-[#D8CEB9] hover:border-[#263D32] text-[#263D32] inline-flex items-center gap-1 cursor-pointer"
-                          >
-                            <Download className="w-3.5 h-3.5" />
-                            <span>CSV</span>
-                          </button>
-
-                          {!isCancelled && (
-                            <button
-                              type="button"
-                              onClick={() =>
-                                handleCancelDepartureWithNotification(dep)
-                              }
-                              className="px-2.5 py-1.5 text-xs bg-amber-700 hover:bg-red-800 text-white font-semibold cursor-pointer"
-                            >
-                              Cancelar salida y notificar
-                            </button>
-                          )}
-
-                          <button
-                            type="button"
-                            onClick={() => handleDeleteDeparture(dep.id)}
-                            className="p-2 text-[#746657] hover:text-red-700 border border-[#D8CEB9] cursor-pointer"
-                            aria-label="Eliminar salida"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        </div>
+                      <div className="flex items-center justify-between w-full">
+                        <span
+                          className={`text-xs sm:text-sm font-bold ${
+                            isToday
+                              ? "bg-[#263D32] text-white px-1.5 py-0.5 rounded-sm"
+                              : "text-[#292D29]"
+                          }`}
+                        >
+                          {cell.day}
+                        </span>
+                        <span className="text-[10px] text-[#65745A] opacity-0 group-hover:opacity-100 font-semibold hidden sm:inline">
+                          + Crear
+                        </span>
                       </div>
 
-                      {/* Formulario de edición inline */}
-                      {isEditing && (
-                        <div className="p-4 bg-[#F2EFE6] border border-[#D8CEB9] space-y-3">
-                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                            <input
-                              type="date"
-                              value={editDepDate}
-                              onChange={(e) => setEditDepDate(e.target.value)}
-                              className="px-2.5 py-1.5 bg-white border border-[#D8CEB9] text-xs"
-                            />
-                            <input
-                              type="time"
-                              value={editDepStartTime}
-                              onChange={(e) =>
-                                setEditDepStartTime(e.target.value)
-                              }
-                              className="px-2.5 py-1.5 bg-white border border-[#D8CEB9] text-xs"
-                            />
-                            <input
-                              type="time"
-                              value={editDepEndTime}
-                              onChange={(e) =>
-                                setEditDepEndTime(e.target.value)
-                              }
-                              className="px-2.5 py-1.5 bg-white border border-[#D8CEB9] text-xs"
-                            />
-                          </div>
-                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-                            <input
-                              type="text"
-                              value={editDepDestination}
-                              onChange={(e) =>
-                                setEditDepDestination(e.target.value)
-                              }
-                              className="sm:col-span-2 px-2.5 py-1.5 bg-white border border-[#D8CEB9] text-xs"
-                            />
-                            <input
-                              type="number"
-                              min={1}
-                              max={20}
-                              value={editDepMax}
-                              onChange={(e) =>
-                                setEditDepMax(Number(e.target.value))
-                              }
-                              className="px-2.5 py-1.5 bg-white border border-[#D8CEB9] text-xs"
-                            />
-                          </div>
-                          <textarea
-                            rows={2}
-                            value={editDepInfo}
-                            onChange={(e) => setEditDepInfo(e.target.value)}
-                            className="w-full px-2.5 py-1.5 bg-white border border-[#D8CEB9] text-xs"
-                          />
-                          <div className="flex justify-end gap-2">
-                            <button
-                              type="button"
-                              onClick={() => setEditingDepId(null)}
-                              className="px-3 py-1.5 text-xs border border-[#D8CEB9] bg-white cursor-pointer"
-                            >
-                              Cancelar
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() =>
-                                handleSaveEditedDeparture(dep.id)
-                              }
-                              className="px-4 py-1.5 text-xs bg-[#263D32] text-[#F2EFE6] font-semibold cursor-pointer"
-                            >
-                              Guardar cambios
-                            </button>
-                          </div>
-                        </div>
-                      )}
-
-                      {/* Lista de anotados por salida + agregar manual + promover lista de espera */}
-                      <div className="pt-3 border-t border-[#D8CEB9] space-y-2.5">
-                        <div className="flex items-center justify-between">
-                          <span className="text-[10px] uppercase tracking-[0.2em] text-[#65745A] font-semibold">
-                            Anotados en esta salida ({depEnrollments.length}):
+                      <div className="space-y-1 w-full mt-1">
+                        {isBlocked && (
+                          <span className="block text-[10px] bg-stone-600 text-white px-1.5 py-0.5 rounded-sm truncate font-medium">
+                            Bloqueado
                           </span>
-                          {!isCancelled && (
-                            <button
-                              type="button"
-                              onClick={() =>
-                                setManualEnrollDepId(
-                                  manualEnrollDepId === dep.id ? null : dep.id
-                                )
-                              }
-                              className="text-[11px] text-[#263D32] font-semibold inline-flex items-center gap-1 hover:underline cursor-pointer"
+                        )}
+                        {dayDeps.map((dep) => {
+                          const enrolledPeople = (store.enrollments || [])
+                            .filter(
+                              (e) =>
+                                e.departureId === dep.id &&
+                                e.status === "confirmada"
+                            )
+                            .reduce(
+                              (acc, e) =>
+                                acc + (Number(e.participantsCount) || 1),
+                              0
+                            );
+                          return (
+                            <div
+                              key={dep.id}
+                              className="text-[10px] sm:text-[11px] bg-[#263D32] text-[#F2EFE6] px-1.5 py-0.5 rounded-sm truncate font-medium"
+                              title={`${dep.destination} (${enrolledPeople}/${dep.maxParticipants} anotados)`}
                             >
-                              <UserPlus className="w-3.5 h-3.5" />
-                              <span>Agregar pescador manualmente</span>
-                            </button>
-                          )}
-                        </div>
-
-                        {manualEnrollDepId === dep.id && (
-                          <div className="p-3 bg-[#F2EFE6] border border-[#D8CEB9] grid grid-cols-1 sm:grid-cols-5 gap-2 items-center">
-                            <input
-                              type="text"
-                              placeholder="Nombre *"
-                              value={manualName}
-                              onChange={(e) => setManualName(e.target.value)}
-                              className="px-2.5 py-1.5 bg-white border border-[#D8CEB9] text-xs"
-                            />
-                            <input
-                              type="text"
-                              placeholder="Teléfono/WhatsApp *"
-                              value={manualPhone}
-                              onChange={(e) => setManualPhone(e.target.value)}
-                              className="px-2.5 py-1.5 bg-white border border-[#D8CEB9] text-xs"
-                            />
-                            <input
-                              type="email"
-                              placeholder="Email"
-                              value={manualEmail}
-                              onChange={(e) => setManualEmail(e.target.value)}
-                              className="px-2.5 py-1.5 bg-white border border-[#D8CEB9] text-xs"
-                            />
-                            <input
-                              type="number"
-                              min={1}
-                              max={10}
-                              value={manualCount}
-                              onChange={(e) =>
-                                setManualCount(Number(e.target.value))
-                              }
-                              className="px-2.5 py-1.5 bg-white border border-[#D8CEB9] text-xs"
-                            />
-                            <button
-                              type="button"
-                              onClick={() => handleAddManualEnrollment(dep.id)}
-                              className="px-3 py-1.5 bg-[#263D32] text-[#F2EFE6] text-xs font-semibold cursor-pointer"
-                            >
-                              Guardar
-                            </button>
+                              {dep.destination.replace(/^Río\s+/i, "")} (
+                              {enrolledPeople}/{dep.maxParticipants})
+                            </div>
+                          );
+                        })}
+                        {dayReqs.length > 0 && (
+                          <div className="text-[10px] bg-amber-500 text-white px-1.5 py-0.5 rounded-sm truncate font-semibold">
+                            {dayReqs.length} pedido(s)
                           </div>
                         )}
-
-                        {depEnrollments.length === 0 ? (
-                          <p className="text-xs text-[#746657] italic">
-                            Aún no hay anotados activos en esta salida.
-                          </p>
-                        ) : (
-                          depEnrollments.map((enr) => (
-                            <div
-                              key={enr.id}
-                              className={`p-3 border flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs ${
-                                enr.status === "lista_espera"
-                                  ? "bg-amber-50 border-amber-300"
-                                  : "bg-[#F2EFE6]/70 border-[#D8CEB9]"
-                              }`}
-                            >
-                              <div>
-                                <span
-                                  className={`px-1.5 py-0.5 text-[9px] uppercase font-bold mr-2 ${
-                                    enr.status === "lista_espera"
-                                      ? "bg-amber-600 text-white"
-                                      : "bg-emerald-800 text-white"
-                                  }`}
-                                >
-                                  {enr.status === "lista_espera"
-                                    ? "Lista de Espera"
-                                    : "Confirmada"}
-                                </span>
-                                <strong className="text-[#263D32]">
-                                  {enr.fullName}
-                                </strong>{" "}
-                                ({enr.bookingCode}) ·{" "}
-                                <span className="font-semibold text-[#B35B2B]">
-                                  {enr.participantsCount} pers.
-                                </span>{" "}
-                                · {enr.whatsapp} · {enr.email}
-                              </div>
-
-                              <div className="flex flex-wrap items-center gap-1.5">
-                                <a
-                                  href={buildWaUrl(
-                                    enr.whatsapp,
-                                    `Hola ${enr.fullName}, te contacto de TRAUM Fly Cast Patagonia por tu anotación (${enr.bookingCode}) para la salida del ${dep.date} en ${dep.destination}.`
-                                  )}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="px-2.5 py-1 bg-emerald-700 hover:bg-emerald-800 text-white text-[10px] uppercase tracking-wider font-semibold inline-flex items-center gap-1"
-                                >
-                                  <span>WhatsApp</span>
-                                  <ExternalLink className="w-3 h-3" />
-                                </a>
-
-                                {enr.status === "lista_espera" &&
-                                  dep.availableSpots >=
-                                    enr.participantsCount && (
-                                    <button
-                                      type="button"
-                                      onClick={() =>
-                                        handlePromoteFromWaitlist(enr.id)
-                                      }
-                                      className="px-2.5 py-1 bg-[#263D32] hover:bg-[#65745A] text-white text-[10px] uppercase tracking-wider font-semibold cursor-pointer"
-                                    >
-                                      Promover a Confirmada
-                                    </button>
-                                  )}
-
-                                <button
-                                  type="button"
-                                  onClick={() =>
-                                    handleCancelOrReleaseInquiry(enr.id, false)
-                                  }
-                                  className="px-2.5 py-1 bg-[#B35B2B] hover:bg-red-800 text-white text-[10px] uppercase tracking-wider font-semibold cursor-pointer"
-                                >
-                                  Quitar / Cancelar
-                                </button>
-                              </div>
-                            </div>
-                          ))
-                        )}
                       </div>
-                    </div>
+                    </button>
                   );
                 })}
               </div>
             </div>
-          </div>
-        )}
 
-        {/* TAB: ALL SITE IMAGES MANAGER */}
-        {activeTab === "images" && (
-          <div className="bg-white border border-[#D8CEB9] p-6 sm:p-8 space-y-8">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-5 border-b border-[#D8CEB9]">
-              <div>
-                <h3 className="font-editorial text-3xl text-[#263D32]">
-                  Gestor Completo de Fotografías de la Web
-                </h3>
-                <p className="text-xs text-[#746657]">
-                  Modificá cualquiera de las fotografías del sitio pegando un
-                  link o subiendo una imagen desde tu dispositivo. Ninguna foto
-                  está repetida.
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() =>
-                  persistStore(store, "Todas las fotografías fueron guardadas")
-                }
-                disabled={saving}
-                className="px-6 py-3 bg-[#263D32] text-[#F2EFE6] hover:bg-[#65745A] text-xs uppercase tracking-[0.2em] font-semibold inline-flex items-center gap-2 cursor-pointer"
-              >
-                <Save className="w-4 h-4" />
-                <span>Guardar todas las fotos</span>
-              </button>
-            </div>
-
-            {/* Section 1: Portada, Filosofía y Conservación */}
-            <div className="space-y-4">
-              <h4 className="text-xs uppercase tracking-[0.24em] text-[#65745A] font-semibold">
-                1. Portada (Hero), Filosofía y Conservación
-              </h4>
-              <ImageInputControl
-                label="Hero Principal (Portada)"
-                subtitle="Fotografía panorámica a pantalla completa al abrir la web"
-                value={store.siteImages.heroBg}
-                onChange={(val) => updateSiteImageField("heroBg", val)}
-              />
-              <ImageInputControl
-                label="Filosofía · Imagen Principal"
-                subtitle="Fotografía vertical junto a la historia de Traum"
-                value={store.siteImages.philosophyMain}
-                onChange={(val) => updateSiteImageField("philosophyMain", val)}
-              />
-              <ImageInputControl
-                label="Filosofía I · El sueño de la captura"
-                subtitle="Tarjeta conceptual 1"
-                value={store.siteImages.pillarCapture}
-                onChange={(val) => updateSiteImageField("pillarCapture", val)}
-              />
-              <ImageInputControl
-                label="Filosofía II · El sueño de desconectar"
-                subtitle="Tarjeta conceptual 2"
-                value={store.siteImages.pillarDisconnect}
-                onChange={(val) =>
-                  updateSiteImageField("pillarDisconnect", val)
-                }
-              />
-              <ImageInputControl
-                label="Filosofía III · El sueño de compartir"
-                subtitle="Tarjeta conceptual 3"
-                value={store.siteImages.pillarShare}
-                onChange={(val) => updateSiteImageField("pillarShare", val)}
-              />
-              <ImageInputControl
-                label="Pesca Responsable (Catch & Release)"
-                subtitle="Fotografía de devolución y conservación del recurso"
-                value={store.siteImages.conservationMain}
-                onChange={(val) =>
-                  updateSiteImageField("conservationMain", val)
-                }
-              />
-              <ImageInputControl
-                label="Fondo de Cita Editorial (Henry David Thoreau)"
-                subtitle="Fotografía panorámica detrás de la frase inspiracional"
-                value={store.siteImages.thoreauQuoteBg}
-                onChange={(val) => updateSiteImageField("thoreauQuoteBg", val)}
-              />
-            </div>
-
-            {/* Section 2: Experiencias */}
-            <div className="space-y-4 pt-6 border-t border-[#D8CEB9]">
-              <h4 className="text-xs uppercase tracking-[0.24em] text-[#65745A] font-semibold">
-                2. Fotografías de las 3 Modalidades (Experiencias)
-              </h4>
-              {store.experiences.map((exp, idx) => (
-                <ImageInputControl
-                  key={exp.id}
-                  label={`Experiencia ${exp.number}: ${exp.title}`}
-                  subtitle={exp.subtitle}
-                  value={exp.imageUrl}
-                  onChange={(newUrl) => {
-                    const nextExp = [...store.experiences];
-                    nextExp[idx] = { ...exp, imageUrl: newUrl };
-                    setStore({ ...store, experiences: nextExp });
-                  }}
-                />
-              ))}
-            </div>
-
-            {/* Section 3: Destinos */}
-            <div className="space-y-4 pt-6 border-t border-[#D8CEB9]">
-              <h4 className="text-xs uppercase tracking-[0.24em] text-[#65745A] font-semibold">
-                3. Fotografías de cada Río / Lago (Destinos y Mapa)
-              </h4>
-              {store.destinations.map((dest, idx) => (
-                <ImageInputControl
-                  key={dest.id}
-                  label={`${dest.name} (${dest.location})`}
-                  subtitle={dest.distanceFromJunin}
-                  value={dest.imageUrl}
-                  onChange={(newUrl) => {
-                    const nextDest = [...store.destinations];
-                    nextDest[idx] = { ...dest, imageUrl: newUrl };
-                    setStore({ ...store, destinations: nextDest });
-                  }}
-                />
-              ))}
-            </div>
-
-            <div className="pt-4 flex justify-end">
-              <button
-                type="button"
-                onClick={() =>
-                  persistStore(store, "Todas las fotografías fueron guardadas")
-                }
-                disabled={saving}
-                className="px-8 py-4 bg-[#263D32] text-[#F2EFE6] hover:bg-[#65745A] text-xs uppercase tracking-[0.2em] font-semibold inline-flex items-center gap-2 cursor-pointer"
-              >
-                <Save className="w-4 h-4" />
-                <span>Guardar cambios de imágenes</span>
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* TAB: DESTINATIONS & MAP */}
-        {activeTab === "destinations" && (
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-            <div className="lg:col-span-5 bg-white border border-[#D8CEB9] p-6">
-              <h3 className="font-editorial text-2xl text-[#263D32] mb-5 pb-3 border-b border-[#D8CEB9]">
-                Agregar río o lago al listado y mapa
-              </h3>
-              <form onSubmit={handleAddDestination} className="space-y-4">
+            {/* LISTADO DE SALIDAS CON ACCIONES RÁPIDAS VISIBLES */}
+            <div className="bg-white border border-[#D8CEB9] p-4 sm:p-6 shadow-sm space-y-5">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-[#D8CEB9] pb-4">
                 <div>
-                  <label className="block text-[10px] uppercase tracking-[0.2em] font-semibold mb-1">
-                    Nombre del río o lago *
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    value={newDestName}
-                    onChange={(e) => setNewDestName(e.target.value)}
-                    placeholder="Ej. Río Quilquihue / Lago Lolog"
-                    className="w-full px-3 py-2 border border-[#D8CEB9] text-sm"
-                  />
-                </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-[10px] uppercase tracking-[0.2em] font-semibold mb-1">
-                      Ubicación *
-                    </label>
-                    <input
-                      type="text"
-                      required
-                      value={newDestLocation}
-                      onChange={(e) => setNewDestLocation(e.target.value)}
-                      className="w-full px-3 py-2 border border-[#D8CEB9] text-sm"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[10px] uppercase tracking-[0.2em] font-semibold mb-1">
-                      Tipo de espejo
-                    </label>
-                    <select
-                      value={newDestWaterType}
-                      onChange={(e) =>
-                        setNewDestWaterType(
-                          e.target.value as "Río" | "Lago" | "Cuenca / Río"
-                        )
-                      }
-                      className="w-full px-3 py-2 border border-[#D8CEB9] text-sm"
-                    >
-                      <option value="Río">Río</option>
-                      <option value="Lago">Lago</option>
-                      <option value="Cuenca / Río">Cuenca / Río</option>
-                    </select>
-                  </div>
-                </div>
-                <div>
-                  <label className="block text-[10px] uppercase tracking-[0.2em] font-semibold mb-1">
-                    Distancia desde Junín de los Andes
-                  </label>
-                  <input
-                    type="text"
-                    value={newDestDistance}
-                    onChange={(e) => setNewDestDistance(e.target.value)}
-                    placeholder="Ej. 18 km al sur de Junín de los Andes"
-                    className="w-full px-3 py-2 border border-[#D8CEB9] text-sm"
-                  />
-                </div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-[10px] uppercase tracking-[0.2em] font-semibold mb-1">
-                      Latitud (Mapa)
-                    </label>
-                    <input
-                      type="text"
-                      value={newDestLat}
-                      onChange={(e) => setNewDestLat(e.target.value)}
-                      className="w-full px-3 py-2 border border-[#D8CEB9] text-sm"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[10px] uppercase tracking-[0.2em] font-semibold mb-1">
-                      Longitud (Mapa)
-                    </label>
-                    <input
-                      type="text"
-                      value={newDestLng}
-                      onChange={(e) => setNewDestLng(e.target.value)}
-                      className="w-full px-3 py-2 border border-[#D8CEB9] text-sm"
-                    />
-                  </div>
-                </div>
-                <div>
-                  <label className="block text-[10px] uppercase tracking-[0.2em] font-semibold mb-1">
-                    URL de Fotografía *
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    value={newDestImage}
-                    onChange={(e) => setNewDestImage(e.target.value)}
-                    className="w-full px-3 py-2 border border-[#D8CEB9] text-sm"
-                  />
-                </div>
-                <div>
-                  <label className="block text-[10px] uppercase tracking-[0.2em] font-semibold mb-1">
-                    Descripción del entorno *
-                  </label>
-                  <textarea
-                    rows={3}
-                    required
-                    value={newDestDesc}
-                    onChange={(e) => setNewDestDesc(e.target.value)}
-                    className="w-full px-3 py-2 border border-[#D8CEB9] text-sm"
-                  />
-                </div>
-                <button
-                  type="submit"
-                  className="w-full py-3 bg-[#263D32] text-[#F2EFE6] text-xs uppercase tracking-[0.2em] font-semibold flex items-center justify-center gap-2 cursor-pointer"
-                >
-                  <Plus className="w-4 h-4" />
-                  <span>Incorporar destino</span>
-                </button>
-              </form>
-            </div>
-
-            <div className="lg:col-span-7 space-y-4">
-              {store.destinations.map((dest) => (
-                <div
-                  key={dest.id}
-                  className="bg-white border border-[#D8CEB9] p-5 flex items-start justify-between gap-4"
-                >
-                  <div className="space-y-1">
-                    <span className="text-[10px] uppercase tracking-[0.2em] text-[#65745A] font-semibold">
-                      {dest.location} · {dest.distanceFromJunin} ({dest.lat},{" "}
-                      {dest.lng})
-                    </span>
-                    <h4 className="font-editorial text-2xl text-[#263D32]">
-                      {dest.name}
-                    </h4>
-                    <p className="text-xs text-[#292D29]/80 leading-relaxed">
-                      {dest.description}
-                    </p>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => handleDeleteDestination(dest.id)}
-                    className="p-2.5 text-[#746657] hover:text-red-700 border border-[#D8CEB9] cursor-pointer"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* TAB: SERVICES & PAYMENT METHODS */}
-        {activeTab === "services" && (
-          <div className="space-y-8">
-            {/* Modular Services Toggle */}
-            <div className="bg-white border border-[#D8CEB9] p-6 sm:p-8 space-y-6">
-              <div>
-                <h3 className="font-editorial text-2xl text-[#263D32]">
-                  Prestaciones y Servicios Incluidos
-                </h3>
-                <p className="text-xs text-[#746657]">
-                  Activá o desactivá cada bloque según las prestaciones vigentes
-                  que ofrezca Traum en la temporada.
-                </p>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {store.services.map((srv, sIdx) => (
-                  <div
-                    key={srv.id}
-                    className={`p-5 border space-y-3 ${
-                      srv.enabled
-                        ? "bg-[#F2EFE6] border-[#65745A]"
-                        : "bg-gray-100 border-gray-300 opacity-60"
-                    }`}
-                  >
-                    <div className="flex items-start justify-between gap-4">
-                      <div className="space-y-1">
-                        <h4 className="font-editorial text-xl text-[#263D32]">
-                          {srv.title}
-                        </h4>
-                        <p className="text-xs text-[#292D29]/80">
-                          {srv.description}
-                        </p>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => handleToggleService(srv.id)}
-                        className={`px-3 py-1.5 text-[10px] uppercase tracking-wider font-semibold cursor-pointer ${
-                          srv.enabled
-                            ? "bg-[#263D32] text-[#F2EFE6]"
-                            : "bg-[#D8CEB9] text-[#292D29]"
-                        }`}
-                      >
-                        {srv.enabled ? "Activo" : "Inactivo"}
-                      </button>
-                    </div>
-
-                    <div className="pt-2 border-t border-[#D8CEB9]">
-                      <label className="block text-[10px] uppercase tracking-[0.18em] text-[#746657] font-semibold mb-1">
-                        Etiqueta de Tarifa / Condición Comercial
-                      </label>
-                      <input
-                        type="text"
-                        value={srv.priceLabel || ""}
-                        onChange={(e) => {
-                          const nextSrv = [...store.services];
-                          nextSrv[sIdx] = {
-                            ...srv,
-                            priceLabel: e.target.value,
-                          };
-                          setStore({ ...store, services: nextSrv });
-                        }}
-                        placeholder="Ej. Jornada guiada · Seña del 30%"
-                        className="w-full px-3 py-2 bg-white border border-[#D8CEB9] text-xs"
-                      />
-                    </div>
-                  </div>
-                ))}
-              </div>
-              <div className="pt-2 flex justify-end">
-                <button
-                  type="button"
-                  onClick={() =>
-                    persistStore(store, "Prestaciones y tarifas actualizadas")
-                  }
-                  className="px-5 py-2.5 bg-[#263D32] text-[#F2EFE6] text-xs uppercase tracking-wider font-semibold inline-flex items-center gap-2 cursor-pointer"
-                >
-                  <Save className="w-3.5 h-3.5" />
-                  <span>Guardar prestaciones</span>
-                </button>
-              </div>
-            </div>
-
-            {/* Payment Methods Configuration (Without CBU) */}
-            <div className="bg-white border border-[#D8CEB9] p-6 sm:p-8 space-y-6">
-              <div className="flex items-center justify-between pb-4 border-b border-[#D8CEB9]">
-                <div>
-                  <h3 className="font-editorial text-2xl text-[#263D32]">
-                    Configuración de Medios de Pago y Señas (Ocultos hasta Contratar)
+                  <h3 className="font-serif text-2xl text-[#263D32]">
+                    Salidas Programadas
                   </h3>
                   <p className="text-xs text-[#746657]">
-                    En la web pública sólo se muestra con qué medios se puede
-                    pagar y el porcentaje de seña. El Alias y Titular se
-                    muestran recién en el Paso 2 cuando el cliente contrata un
-                    servicio (sin CBU).
+                    Todas las acciones están visibles en cada tarjeta (Editar,
+                    Duplicar, Cancelar, Ver anotados).
                   </p>
                 </div>
-                <button
-                  type="button"
-                  onClick={() =>
-                    setStore({
-                      ...store,
-                      paymentConfig: {
-                        ...store.paymentConfig,
-                        enabled: !store.paymentConfig.enabled,
-                      },
-                    })
-                  }
-                  className={`px-4 py-2 text-xs uppercase tracking-wider font-semibold cursor-pointer ${
-                    store.paymentConfig.enabled
-                      ? "bg-[#263D32] text-[#F2EFE6]"
-                      : "bg-[#D8CEB9] text-[#292D29]"
-                  }`}
-                >
-                  {store.paymentConfig.enabled
-                    ? "Sección Pagos Visible"
-                    : "Sección Pagos Oculta"}
-                </button>
-              </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-[10px] uppercase tracking-[0.2em] font-semibold mb-1">
-                    Banco / Entidad (Visible sólo al contratar)
-                  </label>
-                  <input
-                    type="text"
-                    value={store.paymentConfig.bankName}
-                    onChange={(e) =>
-                      setStore({
-                        ...store,
-                        paymentConfig: {
-                          ...store.paymentConfig,
-                          bankName: e.target.value,
-                        },
-                      })
-                    }
-                    className="w-full px-3.5 py-2.5 border border-[#D8CEB9] text-sm"
-                  />
-                </div>
-                <div>
-                  <label className="block text-[10px] uppercase tracking-[0.2em] font-semibold mb-1">
-                    Titular de la cuenta (Visible sólo al contratar)
-                  </label>
-                  <input
-                    type="text"
-                    value={store.paymentConfig.bankHolder}
-                    onChange={(e) =>
-                      setStore({
-                        ...store,
-                        paymentConfig: {
-                          ...store.paymentConfig,
-                          bankHolder: e.target.value,
-                        },
-                      })
-                    }
-                    className="w-full px-3.5 py-2.5 border border-[#D8CEB9] text-sm"
-                  />
-                </div>
-                <div>
-                  <label className="block text-[10px] uppercase tracking-[0.2em] font-semibold mb-1">
-                    Alias Bancario / Billetera (Visible sólo al contratar)
-                  </label>
-                  <input
-                    type="text"
-                    value={store.paymentConfig.bankAlias}
-                    onChange={(e) =>
-                      setStore({
-                        ...store,
-                        paymentConfig: {
-                          ...store.paymentConfig,
-                          bankAlias: e.target.value,
-                        },
-                      })
-                    }
-                    className="w-full px-3.5 py-2.5 border border-[#D8CEB9] text-sm"
-                  />
-                </div>
-                <div>
-                  <label className="block text-[10px] uppercase tracking-[0.2em] font-semibold mb-1">
-                    Porcentaje de Seña (%)
-                  </label>
-                  <input
-                    type="number"
-                    min={5}
-                    max={100}
-                    value={store.paymentConfig.depositPercentage}
-                    onChange={(e) =>
-                      setStore({
-                        ...store,
-                        paymentConfig: {
-                          ...store.paymentConfig,
-                          depositPercentage: Number(e.target.value),
-                        },
-                      })
-                    }
-                    className="w-full px-3.5 py-2.5 border border-[#D8CEB9] text-sm"
-                  />
-                </div>
-                <div>
-                  <label className="block text-[10px] uppercase tracking-[0.2em] font-semibold mb-1">
-                    Link de Pago Mercado Pago (Opcional · Paso 2)
-                  </label>
-                  <input
-                    type="url"
-                    placeholder="https://mpago.la/..."
-                    value={store.paymentConfig.mercadoPagoLink}
-                    onChange={(e) =>
-                      setStore({
-                        ...store,
-                        paymentConfig: {
-                          ...store.paymentConfig,
-                          mercadoPagoLink: e.target.value,
-                        },
-                      })
-                    }
-                    className="w-full px-3.5 py-2.5 border border-[#D8CEB9] text-sm"
-                  />
-                </div>
-                <div>
-                  <label className="block text-[10px] uppercase tracking-[0.2em] font-semibold mb-1">
-                    Link de Pago Internacional PayPal / Stripe (Opcional · Paso 2)
-                  </label>
-                  <input
-                    type="url"
-                    placeholder="https://paypal.me/..."
-                    value={store.paymentConfig.internationalPaymentLink}
-                    onChange={(e) =>
-                      setStore({
-                        ...store,
-                        paymentConfig: {
-                          ...store.paymentConfig,
-                          internationalPaymentLink: e.target.value,
-                        },
-                      })
-                    }
-                    className="w-full px-3.5 py-2.5 border border-[#D8CEB9] text-sm"
-                  />
+                <div className="flex flex-wrap items-center gap-2">
+                  {(
+                    [
+                      { id: "proximas", label: "Próximas activas" },
+                      { id: "todas", label: "Todas" },
+                      { id: "canceladas", label: "Canceladas" },
+                    ] as const
+                  ).map((f) => (
+                    <button
+                      key={f.id}
+                      type="button"
+                      onClick={() => setDepartureFilter(f.id)}
+                      className={`px-3 py-1.5 text-xs font-bold uppercase tracking-wider border cursor-pointer ${
+                        departureFilter === f.id
+                          ? "bg-[#263D32] text-white border-[#263D32]"
+                          : "bg-[#F2EFE6] text-[#292D29] border-[#D8CEB9]"
+                      }`}
+                    >
+                      {f.label}
+                    </button>
+                  ))}
                 </div>
               </div>
 
-              <button
-                type="button"
-                onClick={() =>
-                  persistStore(store, "Medios de pago y seña actualizados en vivo")
-                }
-                className="px-6 py-3 bg-[#263D32] text-[#F2EFE6] hover:bg-[#65745A] text-xs uppercase tracking-[0.2em] font-semibold inline-flex items-center gap-2 cursor-pointer"
-              >
-                <Save className="w-4 h-4" />
-                <span>Guardar medios de pago y seña</span>
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* TAB: REVIEWS MODERATION */}
-        {activeTab === "reviews" && (
-          <div className="space-y-6">
-            <div className="bg-white border border-[#D8CEB9] p-6">
-              <h3 className="font-editorial text-2xl text-[#263D32] mb-1">
-                Moderación de Reseñas Públicas ({store.reviews.length})
-              </h3>
-              <p className="text-xs text-[#746657]">
-                Cualquier visitante puede dejar su reseña en la página pública y
-                desde acá podés eliminar de inmediato cualquiera que sea
-                inapropiada.
-              </p>
-            </div>
-
-            <div className="space-y-4">
-              {store.reviews.map((rev) => (
-                <div
-                  key={rev.id}
-                  className="bg-white border border-[#D8CEB9] p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4"
-                >
-                  <div className="space-y-1.5">
-                    <div className="flex items-center gap-2">
-                      <div className="flex items-center gap-0.5">
-                        {Array.from({ length: rev.rating }).map((_, i) => (
-                          <Star
-                            key={i}
-                            className="w-3.5 h-3.5 fill-[#263D32] text-[#263D32]"
-                          />
-                        ))}
-                      </div>
-                      <span className="text-xs font-semibold text-[#263D32]">
-                        {rev.authorName}
-                      </span>
-                      <span className="text-xs text-[#746657]">
-                        ({rev.authorLocation} · {rev.experienceModality})
-                      </span>
-                    </div>
-                    <p className="text-sm text-[#292D29] italic">
-                      “{rev.comment}”
-                    </p>
-                  </div>
-
+              {visibleDepartures.length === 0 ? (
+                <div className="p-8 text-center bg-[#F2EFE6]/60 border border-[#D8CEB9]">
+                  <p className="text-sm text-[#746657] mb-3">
+                    No hay salidas en esta vista. Tocá cualquier día del
+                    calendario arriba para crear una salida en 2 clics.
+                  </p>
                   <button
                     type="button"
-                    onClick={() => handleDeleteReview(rev.id)}
-                    className="px-4 py-2 text-xs uppercase tracking-wider text-red-700 border border-red-200 hover:bg-red-50 flex items-center gap-1.5 cursor-pointer self-start sm:self-center"
+                    onClick={() => openCreateModalForDate(todayAR)}
+                    className="px-4 py-2.5 bg-[#263D32] text-white text-xs font-bold uppercase tracking-wider cursor-pointer"
                   >
-                    <Trash2 className="w-4 h-4" />
-                    <span>Borrar reseña</span>
+                    + Crear salida ahora
                   </button>
                 </div>
-              ))}
+              ) : (
+                <div className="space-y-4">
+                  {visibleDepartures.map((dep) => {
+                    const depEnrollments = (store.enrollments || []).filter(
+                      (e) => e.departureId === dep.id
+                    );
+                    const activeEnrollments = depEnrollments.filter(
+                      (e) => e.status !== "cancelada"
+                    );
+                    const confirmedPeople = depEnrollments
+                      .filter((e) => e.status === "confirmada")
+                      .reduce(
+                        (acc, e) => acc + (Number(e.participantsCount) || 1),
+                        0
+                      );
+                    const waitlistCount = depEnrollments.filter(
+                      (e) => e.status === "lista_espera"
+                    ).length;
+                    const isExpanded = expandedDepId === dep.id;
+                    const isCancelled = dep.status === "cancelada";
+
+                    return (
+                      <div
+                        key={dep.id}
+                        className={`border p-4 sm:p-5 transition-all ${
+                          isCancelled
+                            ? "bg-stone-100 border-stone-300 opacity-80"
+                            : "bg-[#FAF8F3] border-[#D8CEB9]"
+                        }`}
+                      >
+                        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+                          {/* Datos principales de la salida */}
+                          <div className="space-y-1.5">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <span
+                                className={`px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-wider ${
+                                  isCancelled
+                                    ? "bg-red-800 text-white"
+                                    : dep.availableSpots === 0
+                                    ? "bg-amber-700 text-white"
+                                    : "bg-[#263D32] text-[#F2EFE6]"
+                                }`}
+                              >
+                                {isCancelled
+                                  ? "Cancelada"
+                                  : dep.availableSpots === 0
+                                  ? "Cupos completos"
+                                  : `${dep.availableSpots} libre(s) de ${dep.maxParticipants}`}
+                              </span>
+                              <span className="text-xs font-bold uppercase tracking-wider text-[#65745A]">
+                                {dep.experienceType}
+                              </span>
+                              <span className="text-xs text-[#746657] flex items-center gap-1">
+                                <Clock className="w-3.5 h-3.5" />
+                                {dep.startTime}
+                                {dep.endTime ? ` a ${dep.endTime} hs` : " hs"}
+                              </span>
+                            </div>
+
+                            <h4 className="font-serif text-xl sm:text-2xl text-[#263D32] font-bold">
+                              {formatReadableDate(dep.date)} · {dep.destination}
+                            </h4>
+
+                            {dep.additionalInfo && (
+                              <p className="text-xs sm:text-sm text-[#746657]">
+                                {dep.additionalInfo}
+                              </p>
+                            )}
+                          </div>
+
+                          {/* 4 ACCIONES RÁPIDAS SIEMPRE VISIBLES EN CADA SALIDA */}
+                          <div className="flex flex-wrap items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setExpandedDepId(isExpanded ? null : dep.id)
+                              }
+                              className={`px-3.5 py-2.5 text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 border cursor-pointer ${
+                                isExpanded
+                                  ? "bg-[#263D32] text-white border-[#263D32]"
+                                  : "bg-white text-[#263D32] border-[#263D32] hover:bg-[#263D32] hover:text-white"
+                              }`}
+                            >
+                              <Users className="w-4 h-4" />
+                              <span>
+                                Ver anotados ({confirmedPeople}/
+                                {dep.maxParticipants}
+                                {waitlistCount > 0
+                                  ? ` + ${waitlistCount} espera`
+                                  : ""}
+                                )
+                              </span>
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() => openEditModalForDeparture(dep)}
+                              className="px-3.5 py-2.5 bg-white hover:bg-[#F2EFE6] text-[#292D29] border border-[#D8CEB9] text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 cursor-pointer"
+                            >
+                              <Edit3 className="w-4 h-4 text-[#263D32]" />
+                              <span>Editar</span>
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={() =>
+                                openDuplicateModalForDeparture(dep)
+                              }
+                              className="px-3.5 py-2.5 bg-white hover:bg-[#F2EFE6] text-[#292D29] border border-[#D8CEB9] text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 cursor-pointer"
+                            >
+                              <Copy className="w-4 h-4 text-[#65745A]" />
+                              <span>Duplicar</span>
+                            </button>
+
+                            {!isCancelled ? (
+                              <button
+                                type="button"
+                                onClick={() => handleCancelDeparture(dep)}
+                                className="px-3.5 py-2.5 bg-red-50 hover:bg-red-100 text-red-800 border border-red-300 text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 cursor-pointer"
+                              >
+                                <Ban className="w-4 h-4" />
+                                <span>Cancelar</span>
+                              </button>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  handleDeleteDeparturePermanently(dep)
+                                }
+                                className="px-3.5 py-2.5 bg-red-50 hover:bg-red-100 text-red-800 border border-red-300 text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 cursor-pointer"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                                <span>Borrar</span>
+                              </button>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* PANEL DESPLEGABLE DE ANOTADOS DE ESTA SALIDA */}
+                        {isExpanded && (
+                          <div className="mt-4 pt-4 border-t border-[#D8CEB9] space-y-4">
+                            <div className="flex flex-wrap items-center justify-between gap-2">
+                              <span className="text-xs font-bold uppercase tracking-wider text-[#263D32]">
+                                Pescadores anotados en esta salida (
+                                {activeEnrollments.length})
+                              </span>
+                              {depEnrollments.length > 0 && (
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    exportDepartureEnrollmentsCsv(dep)
+                                  }
+                                  className="px-3 py-1.5 bg-white border border-[#D8CEB9] hover:border-[#263D32] text-xs font-semibold flex items-center gap-1.5 cursor-pointer"
+                                >
+                                  <Download className="w-3.5 h-3.5" />
+                                  <span>Descargar lista (CSV)</span>
+                                </button>
+                              )}
+                            </div>
+
+                            {activeEnrollments.length === 0 ? (
+                              <p className="text-xs text-[#746657] italic">
+                                Todavía no hay pescadores anotados en esta
+                                salida. Podés anotar uno manualmente acá abajo.
+                              </p>
+                            ) : (
+                              <div className="space-y-2">
+                                {activeEnrollments.map((enr) => (
+                                  <div
+                                    key={enr.id}
+                                    className="p-3 bg-white border border-[#D8CEB9] flex flex-col sm:flex-row sm:items-center justify-between gap-3"
+                                  >
+                                    <div>
+                                      <div className="flex items-center gap-2">
+                                        <span
+                                          className={`px-2 py-0.5 text-[10px] font-bold uppercase ${
+                                            enr.status === "confirmada"
+                                              ? "bg-[#263D32] text-white"
+                                              : "bg-amber-600 text-white"
+                                          }`}
+                                        >
+                                          {enr.status === "confirmada"
+                                            ? "Confirmado"
+                                            : "Lista de espera"}
+                                        </span>
+                                        <strong className="text-sm text-[#263D32]">
+                                          {enr.fullName}
+                                        </strong>
+                                        <span className="text-xs text-[#746657]">
+                                          ({enr.participantsCount} pers.)
+                                        </span>
+                                      </div>
+                                      <p className="text-xs text-[#746657] mt-1">
+                                        Tel: {enr.whatsapp} · Email: {enr.email}{" "}
+                                        · Cód: {enr.bookingCode}
+                                      </p>
+                                      {enr.comments && (
+                                        <p className="text-xs text-[#292D29] mt-0.5 italic">
+                                          &ldquo;{enr.comments}&rdquo;
+                                        </p>
+                                      )}
+                                    </div>
+
+                                    <div className="flex flex-wrap items-center gap-2">
+                                      <a
+                                        href={buildWaUrl(
+                                          enr.whatsapp,
+                                          `Hola ${enr.fullName}, soy el guía de TRAUM Fly Cast Patagonia. Te escribo por tu salida del ${dep.date} en ${dep.destination}.`
+                                        )}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        className="px-3 py-1.5 bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold uppercase tracking-wider flex items-center gap-1.5"
+                                      >
+                                        <MessageCircle className="w-3.5 h-3.5" />
+                                        <span>WhatsApp</span>
+                                      </a>
+
+                                      {enr.status === "lista_espera" && (
+                                        <button
+                                          type="button"
+                                          onClick={() =>
+                                            runAdminAction(
+                                              {
+                                                type: "PROMOTE_WAITLIST",
+                                                enrollmentId: enr.id,
+                                              },
+                                              `${enr.fullName} pasó a anotación confirmada.`
+                                            )
+                                          }
+                                          className="px-3 py-1.5 bg-[#263D32] text-white text-xs font-bold uppercase tracking-wider cursor-pointer"
+                                        >
+                                          Confirmar cupo
+                                        </button>
+                                      )}
+
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          if (
+                                            window.confirm(
+                                              `¿Dar de baja a ${enr.fullName} de esta salida y liberar su cupo?`
+                                            )
+                                          ) {
+                                            runAdminAction(
+                                              {
+                                                type: "CANCEL_ENROLLMENT",
+                                                enrollmentId: enr.id,
+                                              },
+                                              `Se liberó el cupo de ${enr.fullName}.`
+                                            );
+                                          }
+                                        }}
+                                        className="px-3 py-1.5 bg-red-50 hover:bg-red-100 text-red-800 border border-red-200 text-xs font-bold uppercase tracking-wider cursor-pointer"
+                                      >
+                                        Dar de baja
+                                      </button>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+
+                            {/* Agregar pescador manualmente en 1 paso */}
+                            {!isCancelled && (
+                              <div className="p-3 bg-[#F2EFE6] border border-[#D8CEB9]">
+                                <span className="text-xs font-bold uppercase tracking-wider text-[#263D32] block mb-2">
+                                  + Anotar pescador manualmente (por teléfono o
+                                  WhatsApp)
+                                </span>
+                                <div className="grid grid-cols-1 sm:grid-cols-5 gap-2">
+                                  <input
+                                    type="text"
+                                    placeholder="Nombre y apellido"
+                                    value={manualName}
+                                    onChange={(e) =>
+                                      setManualName(e.target.value)
+                                    }
+                                    className="px-3 py-2 bg-white border border-[#D8CEB9] text-xs"
+                                  />
+                                  <input
+                                    type="text"
+                                    placeholder="Teléfono / WhatsApp"
+                                    value={manualPhone}
+                                    onChange={(e) =>
+                                      setManualPhone(e.target.value)
+                                    }
+                                    className="px-3 py-2 bg-white border border-[#D8CEB9] text-xs"
+                                  />
+                                  <input
+                                    type="email"
+                                    placeholder="Email (opcional)"
+                                    value={manualEmail}
+                                    onChange={(e) =>
+                                      setManualEmail(e.target.value)
+                                    }
+                                    className="px-3 py-2 bg-white border border-[#D8CEB9] text-xs"
+                                  />
+                                  <select
+                                    value={manualCount}
+                                    onChange={(e) =>
+                                      setManualCount(Number(e.target.value))
+                                    }
+                                    className="px-3 py-2 bg-white border border-[#D8CEB9] text-xs"
+                                  >
+                                    {[1, 2, 3, 4, 5, 6].map((n) => (
+                                      <option key={n} value={n}>
+                                        {n} persona(s)
+                                      </option>
+                                    ))}
+                                  </select>
+                                  <button
+                                    type="button"
+                                    onClick={async () => {
+                                      const res = await runAdminAction(
+                                        {
+                                          type: "ADD_MANUAL_ENROLLMENT",
+                                          departureId: dep.id,
+                                          fullName: manualName,
+                                          whatsapp: manualPhone,
+                                          email:
+                                            manualEmail ||
+                                            "cliente@traumflycast.com",
+                                          participantsCount: manualCount,
+                                        },
+                                        "Pescador anotado en la salida."
+                                      );
+                                      if (res.ok) {
+                                        setManualName("");
+                                        setManualPhone("");
+                                        setManualEmail("");
+                                        setManualCount(1);
+                                      }
+                                    }}
+                                    className="px-3 py-2 bg-[#263D32] hover:bg-[#3A4E3C] text-white text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-1.5 cursor-pointer"
+                                  >
+                                    <UserPlus className="w-3.5 h-3.5" />
+                                    <span>Agregar</span>
+                                  </button>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           </div>
         )}
 
-        {/* TAB: BANDEJA DE SOLICITUDES A PEDIDO + HISTORIAL DE ANOTACIONES */}
-        {activeTab === "inquiries" && (
-          <div className="space-y-8">
-            <div className="bg-white border border-[#D8CEB9] p-6">
-              <h3 className="font-editorial text-2xl text-[#263D32] mb-1">
-                Bandeja de Solicitudes de Salidas a Pedido (
-                {(store.customRequests || []).length})
-              </h3>
-              <p className="text-xs text-[#746657]">
-                Revisá las solicitudes en días sin salida programada. Podés
-                aceptar, rechazar, proponer otra fecha, responder con mensaje
-                por mail/WhatsApp o convertir una solicitud aceptada en salida
-                programada (privada o abierta) con un clic.
-              </p>
+        {/* ================================================================= */}
+        {/* PESTAÑA 2: BANDEJA DE SOLICITUDES + BOTÓN LIMPIAR HISTORIAL       */}
+        {/* ================================================================= */}
+        {activeTab === "solicitudes" && (
+          <div className="bg-white border border-[#D8CEB9] p-4 sm:p-6 shadow-sm space-y-6">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-[#D8CEB9] pb-4">
+              <div>
+                <h2 className="font-serif text-2xl sm:text-3xl text-[#263D32]">
+                  Bandeja de Solicitudes a Pedido
+                </h2>
+                <p className="text-xs sm:text-sm text-[#746657] mt-0.5">
+                  Respondé o contactá al pescador desde la misma tarjeta con un
+                  clic.
+                </p>
+              </div>
+
+              {/* BOTÓN LIMPIAR HISTORIAL */}
+              {allRequests.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setClearMode(
+                      resolvedRequests.length > 0 ? "resolved" : "all"
+                    );
+                    setConfirmDeletePending(false);
+                    setClearHistoryModalOpen(true);
+                  }}
+                  className="px-4 py-2.5 bg-stone-100 hover:bg-red-50 text-[#292D29] hover:text-red-800 border border-[#D8CEB9] hover:border-red-300 text-xs font-bold uppercase tracking-wider flex items-center gap-2 cursor-pointer self-start sm:self-auto"
+                >
+                  <Trash2 className="w-4 h-4" />
+                  <span>Limpiar historial</span>
+                </button>
+              )}
             </div>
 
-            {(store.customRequests || []).length === 0 ? (
-              <div className="bg-white border border-[#D8CEB9] p-10 text-center text-sm text-[#746657]">
-                No hay solicitudes de salidas a pedido registradas por el
-                momento.
+            {allRequests.length === 0 ? (
+              <div className="p-10 text-center bg-[#F2EFE6]/50 border border-[#D8CEB9]">
+                <Inbox className="w-8 h-8 text-[#746657] mx-auto mb-2" />
+                <p className="text-sm text-[#292D29] font-medium">
+                  No hay solicitudes de salidas a pedido en este momento.
+                </p>
               </div>
             ) : (
               <div className="space-y-4">
-                {(store.customRequests || []).map((req) => {
-                  const draft = reqResponseDrafts[req.id] || {
-                    altDate: req.alternativeDate || req.desiredDate,
-                    reply: req.guideResponse || "",
-                  };
+                {allRequests.map((req: CustomTripRequest) => {
+                  const isPending = req.status === "pendiente";
+                  const isProposing = proposingDateReqId === req.id;
 
                   return (
                     <div
                       key={req.id}
-                      className="bg-white border border-[#D8CEB9] p-6 space-y-4"
+                      className={`p-4 sm:p-5 border transition-all ${
+                        isPending
+                          ? "bg-amber-50/60 border-amber-400 shadow-sm"
+                          : "bg-[#FAF8F3] border-[#D8CEB9]"
+                      }`}
                     >
                       <div className="flex flex-col lg:flex-row lg:items-start justify-between gap-4">
                         <div className="space-y-2">
                           <div className="flex flex-wrap items-center gap-2">
-                            <span className="px-2.5 py-1 bg-[#263D32] text-[#F2EFE6] text-xs font-mono font-semibold">
-                              {req.requestCode}
-                            </span>
                             <span
-                              className={`px-2.5 py-1 text-xs uppercase font-bold ${
-                                req.status === "aceptada"
-                                  ? "bg-emerald-100 text-emerald-900"
-                                  : req.status === "rechazada"
-                                  ? "bg-red-100 text-red-900"
+                              className={`px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-wider ${
+                                req.status === "pendiente"
+                                  ? "bg-amber-500 text-white"
+                                  : req.status === "aceptada"
+                                  ? "bg-[#263D32] text-white"
                                   : req.status === "reprogramada"
-                                  ? "bg-amber-100 text-amber-900"
-                                  : "bg-[#D8CEB9] text-[#292D29]"
+                                  ? "bg-blue-800 text-white"
+                                  : "bg-stone-600 text-white"
                               }`}
                             >
-                              Estado: {req.status}
+                              {req.status === "pendiente"
+                                ? "Pendiente de respuesta"
+                                : req.status === "aceptada"
+                                ? "Aceptada"
+                                : req.status === "reprogramada"
+                                ? `Reprogramada (${req.alternativeDate})`
+                                : "Rechazada"}
                             </span>
-                            <span className="px-2.5 py-1 bg-[#F2EFE6] border border-[#D8CEB9] text-xs font-medium">
-                              Fecha solicitada: {req.desiredDate} (
-                              {req.preferredSchedule})
+                            <span className="text-xs font-mono text-[#746657]">
+                              {req.requestCode}
                             </span>
-                            {req.alternativeDate && (
-                              <span className="px-2.5 py-1 bg-amber-50 border border-amber-300 text-xs font-semibold text-amber-900">
-                                Fecha alternativa: {req.alternativeDate}
-                              </span>
-                            )}
                           </div>
 
-                          <h4 className="font-editorial text-2xl text-[#263D32]">
-                            {req.fullName}{" "}
-                            <span className="text-sm font-sans text-[#746657]">
-                              ({req.participantsCount}{" "}
-                              {req.participantsCount === 1
-                                ? "persona"
-                                : "personas"}
-                              )
-                            </span>
-                          </h4>
+                          <h3 className="font-serif text-xl sm:text-2xl text-[#263D32] font-bold">
+                            {req.fullName} ·{" "}
+                            {formatReadableDate(req.desiredDate)} (
+                            {req.preferredSchedule})
+                          </h3>
 
-                          <div className="text-xs text-[#292D29]/80 flex flex-wrap gap-4">
+                          <div className="flex flex-wrap gap-x-5 gap-y-1 text-xs sm:text-sm text-[#292D29]">
+                            <span>
+                              <strong>Pescadores:</strong>{" "}
+                              {req.participantsCount} persona(s)
+                            </span>
+                            <span>
+                              <strong>Río preferido:</strong>{" "}
+                              {req.preferredRiver || "A sugerencia del guía"}
+                            </span>
+                            <span>
+                              <strong>Tipo de pesca:</strong>{" "}
+                              {req.experienceType || "A definir"}
+                            </span>
                             <span>
                               <strong>WhatsApp:</strong> {req.whatsapp}
                             </span>
                             <span>
                               <strong>Email:</strong> {req.email}
                             </span>
-                            <span>
-                              <strong>Río preferido:</strong>{" "}
-                              {req.preferredRiver || "A coordinar"}
-                            </span>
-                            <span>
-                              <strong>Tipo de pesca:</strong>{" "}
-                              {req.experienceType || "A coordinar"}
-                            </span>
                           </div>
 
                           {req.comments && (
-                            <p className="text-xs text-[#746657] italic bg-[#F2EFE6] p-3 border border-[#D8CEB9]">
-                              “{req.comments}”
+                            <p className="text-xs sm:text-sm bg-white p-3 border border-[#D8CEB9] text-[#292D29] italic">
+                              &ldquo;{req.comments}&rdquo;
                             </p>
                           )}
                         </div>
 
-                        {/* Acciones rápidas y WhatsApp con mensaje prellenado */}
-                        <div className="flex flex-wrap items-center gap-2">
-                          <a
-                            href={buildWaUrl(
-                              req.whatsapp,
-                              `Hola ${req.fullName}, soy el guía de TRAUM Fly Cast Patagonia. Vi tu solicitud (${req.requestCode}) para salir a pescar el ${req.desiredDate} (${req.preferredSchedule}) para ${req.participantsCount} persona(s). Te escribo para coordinar.`
-                            )}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="px-3.5 py-2 bg-emerald-700 hover:bg-emerald-800 text-white text-xs uppercase tracking-wider font-semibold inline-flex items-center gap-1.5"
-                          >
-                            <span>WhatsApp Prellenado</span>
-                            <ExternalLink className="w-3.5 h-3.5" />
-                          </a>
-
+                        {/* BOTONES GRANDES EN LA MISMA TARJETA */}
+                        <div className="flex flex-wrap items-center gap-2 lg:justify-end">
                           <button
                             type="button"
+                            disabled={busyAction}
                             onClick={() =>
-                              handleRespondCustomRequest(
-                                req.id,
-                                "aceptada",
-                                draft.altDate,
-                                draft.reply
+                              runAdminAction(
+                                {
+                                  type: "RESPOND_CUSTOM_REQUEST",
+                                  requestId: req.id,
+                                  status: "aceptada",
+                                  guideResponse:
+                                    "¡Aceptamos tu solicitud! Coordinamos los detalles por WhatsApp.",
+                                },
+                                `Solicitud de ${req.fullName} aceptada y correo enviado.`
                               )
                             }
-                            className="px-3 py-2 bg-[#263D32] hover:bg-[#65745A] text-[#F2EFE6] text-xs uppercase tracking-wider font-semibold inline-flex items-center gap-1 cursor-pointer"
+                            className="px-4 py-2.5 bg-[#263D32] hover:bg-[#3A4E3C] text-white text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 cursor-pointer"
                           >
-                            <Check className="w-3.5 h-3.5" />
+                            <Check className="w-4 h-4" />
                             <span>Aceptar</span>
                           </button>
 
                           <button
                             type="button"
-                            onClick={() =>
-                              handleRespondCustomRequest(
-                                req.id,
-                                "rechazada",
-                                undefined,
-                                draft.reply
-                              )
-                            }
-                            className="px-3 py-2 bg-[#B35B2B] hover:bg-red-800 text-white text-xs uppercase tracking-wider font-semibold inline-flex items-center gap-1 cursor-pointer"
+                            disabled={busyAction}
+                            onClick={() => {
+                              setProposingDateReqId(
+                                isProposing ? null : req.id
+                              );
+                              setProposedDateVal(
+                                req.alternativeDate || req.desiredDate
+                              );
+                              setProposedNoteVal(req.guideResponse || "");
+                            }}
+                            className="px-4 py-2.5 bg-amber-700 hover:bg-amber-800 text-white text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 cursor-pointer"
                           >
-                            <XCircle className="w-3.5 h-3.5" />
-                            <span>Rechazar</span>
+                            <Calendar className="w-4 h-4" />
+                            <span>Proponer otra fecha</span>
                           </button>
-                        </div>
-                      </div>
 
-                      {/* Responder, proponer otra fecha y convertir en salida programada con 1 clic */}
-                      <div className="pt-3 border-t border-[#D8CEB9] grid grid-cols-1 lg:grid-cols-12 gap-3 items-end">
-                        <div className="lg:col-span-3">
-                          <label className="block text-[10px] uppercase tracking-[0.18em] text-[#746657] font-semibold mb-1">
-                            Fecha alternativa (Reprogramar)
-                          </label>
-                          <input
-                            type="date"
-                            value={draft.altDate}
-                            onChange={(e) =>
-                              setReqResponseDrafts({
-                                ...reqResponseDrafts,
-                                [req.id]: {
-                                  ...draft,
-                                  altDate: e.target.value,
-                                },
-                              })
-                            }
-                            className="w-full px-3 py-2 bg-[#F2EFE6] border border-[#D8CEB9] text-xs"
-                          />
-                        </div>
+                          <a
+                            href={buildWaUrl(
+                              req.whatsapp,
+                              `Hola ${req.fullName}, soy el guía de TRAUM Fly Cast Patagonia. Recibí tu solicitud (${req.requestCode}) para salir a pescar el ${req.desiredDate} (${req.preferredSchedule}). Te escribo para coordinar.`
+                            )}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="px-4 py-2.5 bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold uppercase tracking-wider flex items-center gap-1.5"
+                          >
+                            <MessageCircle className="w-4 h-4" />
+                            <span>WhatsApp</span>
+                          </a>
 
-                        <div className="lg:col-span-5">
-                          <label className="block text-[10px] uppercase tracking-[0.18em] text-[#746657] font-semibold mb-1">
-                            Respuesta del guía (Se envía por email al cliente)
-                          </label>
-                          <input
-                            type="text"
-                            placeholder="Ej. Te propongo salir temprano en el Chimehuín..."
-                            value={draft.reply}
-                            onChange={(e) =>
-                              setReqResponseDrafts({
-                                ...reqResponseDrafts,
-                                [req.id]: {
-                                  ...draft,
-                                  reply: e.target.value,
-                                },
-                              })
-                            }
-                            className="w-full px-3 py-2 bg-[#F2EFE6] border border-[#D8CEB9] text-xs"
-                          />
-                        </div>
-
-                        <div className="lg:col-span-4 flex flex-wrap gap-2">
                           <button
                             type="button"
-                            onClick={() =>
-                              handleRespondCustomRequest(
-                                req.id,
-                                "reprogramada",
-                                draft.altDate,
-                                draft.reply
-                              )
-                            }
-                            className="px-3 py-2 bg-amber-600 hover:bg-amber-700 text-white text-[10px] uppercase tracking-wider font-semibold cursor-pointer"
+                            disabled={busyAction}
+                            onClick={() => {
+                              if (
+                                window.confirm(
+                                  `¿Rechazar la solicitud de ${req.fullName} para el ${formatReadableDate(
+                                    req.desiredDate
+                                  )}?`
+                                )
+                              ) {
+                                runAdminAction(
+                                  {
+                                    type: "RESPOND_CUSTOM_REQUEST",
+                                    requestId: req.id,
+                                    status: "rechazada",
+                                    guideResponse:
+                                      "En esta fecha no contamos con disponibilidad operativa.",
+                                  },
+                                  `Solicitud de ${req.fullName} marcada como rechazada.`
+                                );
+                              }
+                            }}
+                            className="px-4 py-2.5 bg-red-50 hover:bg-red-100 text-red-800 border border-red-300 text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 cursor-pointer"
                           >
-                            Proponer Fecha / Responder
+                            <XCircle className="w-4 h-4" />
+                            <span>Rechazar</span>
                           </button>
 
-                          {!req.convertedToDepartureId ? (
-                            <>
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  handleConvertRequestToDeparture(
-                                    req.id,
-                                    "privada"
-                                  )
-                                }
-                                className="px-3 py-2 bg-[#263D32] hover:bg-[#65745A] text-[#F2EFE6] text-[10px] uppercase tracking-wider font-semibold cursor-pointer"
-                              >
-                                Convertir en Salida Privada (1 clic)
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  handleConvertRequestToDeparture(
-                                    req.id,
-                                    "abierta"
-                                  )
-                                }
-                                className="px-3 py-2 border border-[#263D32] text-[#263D32] hover:bg-[#263D32] hover:text-[#F2EFE6] text-[10px] uppercase tracking-wider font-semibold cursor-pointer"
-                              >
-                                Convertir en Salida Abierta (1 clic)
-                              </button>
-                            </>
-                          ) : (
-                            <span className="px-3 py-2 bg-emerald-50 border border-emerald-400 text-emerald-900 text-[10px] uppercase font-bold">
-                              Ya convertida en salida programada
-                            </span>
+                          {!req.convertedToDepartureId && (
+                            <button
+                              type="button"
+                              disabled={busyAction}
+                              onClick={() =>
+                                runAdminAction(
+                                  {
+                                    type: "CONVERT_REQUEST_TO_DEPARTURE",
+                                    requestId: req.id,
+                                    mode: "privada",
+                                  },
+                                  `Se creó la salida programada y se anotó a ${req.fullName}.`
+                                )
+                              }
+                              className="px-3.5 py-2.5 bg-white hover:bg-[#F2EFE6] text-[#263D32] border border-[#263D32] text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 cursor-pointer"
+                            >
+                              <Sparkles className="w-4 h-4" />
+                              <span>Pasar al calendario</span>
+                            </button>
                           )}
                         </div>
                       </div>
+
+                      {/* CAJA RÁPIDA PARA PROPONER OTRA FECHA DESDE LA MISMA TARJETA */}
+                      {isProposing && (
+                        <div className="mt-4 pt-4 border-t border-amber-300 bg-white p-4 space-y-3">
+                          <span className="text-xs font-bold uppercase tracking-wider text-[#263D32] block">
+                            Proponer fecha alternativa a {req.fullName}
+                          </span>
+                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                            <div>
+                              <label className="block text-[11px] uppercase text-[#746657] mb-1">
+                                Nueva fecha propuesta
+                              </label>
+                              <input
+                                type="date"
+                                value={proposedDateVal}
+                                onChange={(e) =>
+                                  setProposedDateVal(e.target.value)
+                                }
+                                className="w-full px-3 py-2 border border-[#D8CEB9] text-sm"
+                              />
+                            </div>
+                            <div className="sm:col-span-2">
+                              <label className="block text-[11px] uppercase text-[#746657] mb-1">
+                                Mensaje para el cliente (opcional)
+                              </label>
+                              <input
+                                type="text"
+                                value={proposedNoteVal}
+                                onChange={(e) =>
+                                  setProposedNoteVal(e.target.value)
+                                }
+                                placeholder="Ej: El río va a estar ideal un día después..."
+                                className="w-full px-3 py-2 border border-[#D8CEB9] text-sm"
+                              />
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={async () => {
+                                const res = await runAdminAction(
+                                  {
+                                    type: "RESPOND_CUSTOM_REQUEST",
+                                    requestId: req.id,
+                                    status: "reprogramada",
+                                    alternativeDate: proposedDateVal,
+                                    guideResponse:
+                                      proposedNoteVal ||
+                                      `Te proponemos reprogramar para el ${proposedDateVal}.`,
+                                  },
+                                  `Propuesta de nueva fecha (${proposedDateVal}) enviada a ${req.fullName}.`
+                                );
+                                if (res.ok) setProposingDateReqId(null);
+                              }}
+                              className="px-4 py-2 bg-[#263D32] text-white text-xs font-bold uppercase tracking-wider cursor-pointer"
+                            >
+                              Enviar propuesta por mail
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setProposingDateReqId(null)}
+                              className="px-3 py-2 text-xs text-[#746657]"
+                            >
+                              Cancelar
+                            </button>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   );
                 })}
@@ -2553,198 +1987,393 @@ export default function AdminDashboardPage() {
           </div>
         )}
 
-        {/* TAB: COOKIES & LEGAL RECORDS */}
-        {activeTab === "legal_cookies" && (
-          <div className="space-y-8">
-            {/* Solicitudes de Botón de Arrepentimiento */}
-            <div className="bg-white border border-[#D8CEB9] p-6 sm:p-8">
-              <h3 className="font-editorial text-2xl text-[#263D32] mb-1">
-                Solicitudes de Arrepentimiento / Cancelación (Ley 24.240)
-              </h3>
-              <p className="text-xs text-[#746657] mb-6">
-                Registro oficial de solicitudes ingresadas desde el Botón de Arrepentimiento (/arrepentimiento).
+        {/* ================================================================= */}
+        {/* PESTAÑA 3: GALERÍA DE FOTOS (SUBIDA MÚLTIPLE + REORDENAR + BORRAR) */}
+        {/* ================================================================= */}
+        {activeTab === "galeria" && (
+          <div className="bg-white border border-[#D8CEB9] p-4 sm:p-6 shadow-sm space-y-6">
+            <div className="border-b border-[#D8CEB9] pb-4">
+              <h2 className="font-serif text-2xl sm:text-3xl text-[#263D32]">
+                Galería de Fotos de la Página Principal
+              </h2>
+              <p className="text-xs sm:text-sm text-[#746657] mt-0.5">
+                Subí una o varias fotos a la vez. El sistema las redimensiona y
+                optimiza automáticamente para que la web cargue rápido.
               </p>
-
-              {!store.regretRequests || store.regretRequests.length === 0 ? (
-                <p className="text-xs text-[#746657] py-6 text-center bg-[#F2EFE6]/60 border border-[#D8CEB9]">
-                  No se registran solicitudes de revocación o arrepentimiento.
-                </p>
-              ) : (
-                <div className="space-y-3">
-                  {store.regretRequests.map((req) => (
-                    <div
-                      key={req.id}
-                      className="p-4 border border-[#D8CEB9] bg-[#F2EFE6]/40 flex flex-col sm:flex-row sm:items-center justify-between gap-3"
-                    >
-                      <div className="space-y-1">
-                        <div className="flex items-center gap-2">
-                          <span className="px-2 py-0.5 bg-[#B35B2B] text-white text-[10px] font-mono">
-                            Trámite: {req.regretCode}
-                          </span>
-                          <span className="text-xs font-semibold text-[#263D32]">
-                            {req.fullName} ({req.email})
-                          </span>
-                        </div>
-                        <p className="text-xs text-[#746657]">
-                          Servicio/Reserva: <strong>{req.serviceContracted}</strong>{" "}
-                          {req.bookingCode ? `(${req.bookingCode})` : ""} · WhatsApp: {req.whatsapp}
-                        </p>
-                        {req.reason && (
-                          <p className="text-xs text-[#292D29]/80 italic">
-                            Motivo: “{req.reason}”
-                          </p>
-                        )}
-                      </div>
-                      <span className="text-[11px] text-[#746657]">
-                        {new Date(req.createdAt).toLocaleString("es-AR")}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              )}
             </div>
 
-            {/* Registro de Cookies en Servidor */}
-            <div className="bg-white border border-[#D8CEB9] p-6 sm:p-8">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-4 pb-3 border-b border-[#D8CEB9]">
-                <div>
-                  <h3 className="font-editorial text-2xl text-[#263D32]">
-                    Consentimientos de Cookies Guardados en el Servidor
-                  </h3>
-                  <p className="text-xs text-[#746657]">
-                    Cada decisión de cookies de los visitantes se almacena en la base de datos en vivo (Ley 25.326).
-                  </p>
-                </div>
-                <span className="px-3 py-1 bg-[#263D32] text-[#F2EFE6] text-xs font-semibold">
-                  Total registrados: {(store.cookieConsents || []).length}
-                </span>
+            {/* ZONA DE SUBIDA DE 1 O VARIAS IMÁGENES */}
+            <div
+              onDragOver={(e) => e.preventDefault()}
+              onDrop={(e) => {
+                e.preventDefault();
+                if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+                  handleGalleryFilesSelected(e.dataTransfer.files);
+                }
+              }}
+              className="border-2 border-dashed border-[#65745A] bg-[#F2EFE6]/70 p-6 text-center space-y-4"
+            >
+              <Upload className="w-8 h-8 text-[#263D32] mx-auto" />
+              <div>
+                <p className="text-sm font-bold text-[#263D32]">
+                  Seleccioná una o varias fotos desde tu celular o computadora
+                </p>
+                <p className="text-xs text-[#746657] mt-1">
+                  Formatos aceptados: JPG, PNG, WebP (máx. 15 MB por foto, se
+                  optimizan automáticamente).
+                </p>
               </div>
 
-              {!store.cookieConsents || store.cookieConsents.length === 0 ? (
-                <p className="text-xs text-[#746657] py-6 text-center bg-[#F2EFE6]/60 border border-[#D8CEB9]">
-                  Aún no hay registros de cookies almacenados.
-                </p>
-              ) : (
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left border-collapse text-xs">
-                    <thead>
-                      <tr className="border-b border-[#D8CEB9] text-[10px] uppercase tracking-wider text-[#746657]">
-                        <th className="py-2.5 pr-4">Fecha / Hora</th>
-                        <th className="py-2.5 pr-4">Visitante ID</th>
-                        <th className="py-2.5 pr-4">Decisión</th>
-                        <th className="py-2.5 pr-4">Preferencias</th>
-                        <th className="py-2.5 pr-4">Cuenta Google</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-[#D8CEB9]/60">
-                      {store.cookieConsents.slice(0, 50).map((item) => (
-                        <tr key={item.id}>
-                          <td className="py-2.5 pr-4 whitespace-nowrap">
-                            {new Date(item.createdAt).toLocaleString("es-AR")}
-                          </td>
-                          <td className="py-2.5 pr-4 font-mono text-[11px] text-[#263D32]">
-                            {item.visitorId}
-                          </td>
-                          <td className="py-2.5 pr-4">
-                            <span
-                              className={`px-2 py-0.5 text-[10px] uppercase font-semibold ${
-                                item.decision === "accepted"
-                                  ? "bg-[#263D32]/15 text-[#263D32]"
-                                  : "bg-[#B35B2B]/15 text-[#B35B2B]"
-                              }`}
-                            >
-                              {item.decision === "accepted" ? "Aceptadas" : item.decision === "custom" ? "Personalizadas" : "Solo Esenciales"}
-                            </span>
-                          </td>
-                          <td className="py-2.5 pr-4 text-[11px] text-[#746657]">
-                            Esenciales: Sí · Google: {item.preferences?.googleAuth ? "Sí" : "No"} · Pagos: {item.preferences?.payments ? "Sí" : "No"} · Analíticas: {item.preferences?.analytics ? "Sí" : "No"}
-                          </td>
-                          <td className="py-2.5 pr-4 font-mono text-[11px] text-[#746657]">
-                            {item.googleEmail || "Visitante anónimo"}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+              <div className="max-w-md mx-auto">
+                <input
+                  type="text"
+                  value={newGalleryCaption}
+                  onChange={(e) => setNewGalleryCaption(e.target.value)}
+                  placeholder="Epígrafe corto opcional para las fotos a subir (ej: Trucha marrón en el Malleo)"
+                  className="w-full px-3.5 py-2.5 bg-white border border-[#D8CEB9] text-xs sm:text-sm mb-3"
+                />
+
+                <label className="inline-flex items-center justify-center gap-2 px-6 py-3 bg-[#263D32] hover:bg-[#3A4E3C] text-[#F2EFE6] text-xs font-bold uppercase tracking-wider cursor-pointer shadow-sm">
+                  <Upload className="w-4 h-4" />
+                  <span>
+                    {uploadingGallery
+                      ? "Optimizando y subiendo..."
+                      : "Elegir foto(s) para subir"}
+                  </span>
+                  <input
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp"
+                    multiple
+                    disabled={uploadingGallery}
+                    onChange={(e) => {
+                      handleGalleryFilesSelected(e.target.files);
+                      e.target.value = "";
+                    }}
+                    className="hidden"
+                  />
+                </label>
+              </div>
+            </div>
+
+            {/* GRILLA DE FOTOS ACTUALES EN LA GALERÍA */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {sortedGallery.map((item: GalleryImageItem, index: number) => (
+                <div
+                  key={item.id}
+                  className="border border-[#D8CEB9] bg-[#FAF8F3] overflow-hidden flex flex-col justify-between"
+                >
+                  <div className="relative aspect-[4/3] bg-[#292D29]">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={item.imageUrl}
+                      alt={item.caption || `Foto ${index + 1}`}
+                      className="w-full h-full object-cover"
+                    />
+                    <span className="absolute top-2 left-2 px-2.5 py-1 bg-[#263D32]/90 text-white text-[11px] font-bold">
+                      #{index + 1}
+                    </span>
+                  </div>
+
+                  <div className="p-3.5 space-y-3">
+                    <div>
+                      <label className="block text-[10px] uppercase tracking-wider text-[#746657] mb-1">
+                        Epígrafe corto (opcional)
+                      </label>
+                      <div className="flex gap-1.5">
+                        <input
+                          type="text"
+                          value={editingCaptions[item.id] ?? item.caption ?? ""}
+                          onChange={(e) =>
+                            setEditingCaptions((prev) => ({
+                              ...prev,
+                              [item.id]: e.target.value,
+                            }))
+                          }
+                          placeholder="Sin epígrafe..."
+                          className="flex-1 px-2.5 py-1.5 bg-white border border-[#D8CEB9] text-xs"
+                        />
+                        <button
+                          type="button"
+                          onClick={() =>
+                            runAdminAction(
+                              {
+                                type: "MANAGE_GALLERY",
+                                subAction: "UPDATE_CAPTION",
+                                imageId: item.id,
+                                caption: editingCaptions[item.id] ?? "",
+                              },
+                              "Epígrafe guardado."
+                            )
+                          }
+                          className="px-2.5 py-1.5 bg-[#263D32] text-white text-xs font-bold uppercase cursor-pointer"
+                          title="Guardar epígrafe"
+                        >
+                          <Save className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Botones de 1 clic para cambiar orden o eliminar */}
+                    <div className="flex items-center justify-between gap-2 pt-2 border-t border-[#D8CEB9]">
+                      <div className="flex items-center gap-1">
+                        <button
+                          type="button"
+                          disabled={index === 0 || busyAction}
+                          onClick={() =>
+                            runAdminAction({
+                              type: "MANAGE_GALLERY",
+                              subAction: "REORDER",
+                              imageId: item.id,
+                              direction: "LEFT",
+                            })
+                          }
+                          className="px-2.5 py-1.5 bg-white border border-[#D8CEB9] hover:border-[#263D32] disabled:opacity-40 text-xs font-semibold flex items-center gap-1 cursor-pointer"
+                          title="Mover antes"
+                        >
+                          <ArrowUp className="w-3.5 h-3.5" />
+                          <span>Subir</span>
+                        </button>
+                        <button
+                          type="button"
+                          disabled={
+                            index === sortedGallery.length - 1 || busyAction
+                          }
+                          onClick={() =>
+                            runAdminAction({
+                              type: "MANAGE_GALLERY",
+                              subAction: "REORDER",
+                              imageId: item.id,
+                              direction: "RIGHT",
+                            })
+                          }
+                          className="px-2.5 py-1.5 bg-white border border-[#D8CEB9] hover:border-[#263D32] disabled:opacity-40 text-xs font-semibold flex items-center gap-1 cursor-pointer"
+                          title="Mover después"
+                        >
+                          <ArrowDown className="w-3.5 h-3.5" />
+                          <span>Bajar</span>
+                        </button>
+                      </div>
+
+                      <button
+                        type="button"
+                        disabled={busyAction}
+                        onClick={() => {
+                          if (
+                            window.confirm(
+                              "¿Seguro que querés quitar esta foto de la galería?"
+                            )
+                          ) {
+                            runAdminAction(
+                              {
+                                type: "MANAGE_GALLERY",
+                                subAction: "DELETE",
+                                imageId: item.id,
+                              },
+                              "Foto eliminada de la galería."
+                            );
+                          }
+                        }}
+                        className="px-3 py-1.5 bg-red-50 hover:bg-red-100 text-red-800 border border-red-200 text-xs font-bold uppercase tracking-wider flex items-center gap-1 cursor-pointer"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                        <span>Quitar</span>
+                      </button>
+                    </div>
+                  </div>
                 </div>
-              )}
+              ))}
             </div>
           </div>
         )}
 
-        {/* TAB: SETTINGS & CONTACT */}
-        {activeTab === "settings" && (
-          <div className="bg-white border border-[#D8CEB9] p-6 sm:p-8 max-w-3xl space-y-6">
-            <h3 className="font-editorial text-2xl text-[#263D32] pb-3 border-b border-[#D8CEB9]">
-              Datos de Contacto, Correo de Pedidos y Blindaje Legal
-            </h3>
-
-            <div className="space-y-4">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        {/* ================================================================= */}
+        {/* PESTAÑA 4: CORREOS (CON BOTÓN DE PRUEBA) Y AJUSTES GENERALES      */}
+        {/* ================================================================= */}
+        {activeTab === "ajustes" && (
+          <div className="space-y-6">
+            {/* BLOQUE 1: CONFIGURACIÓN Y PRUEBA DE CORREO ELECTRÓNICO */}
+            <div className="bg-white border border-[#D8CEB9] p-4 sm:p-6 shadow-sm space-y-5">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-[#D8CEB9] pb-4">
                 <div>
-                  <label className="block text-[10px] uppercase tracking-[0.2em] font-semibold mb-1">
-                    Correo electrónico público
-                  </label>
-                  <input
-                    type="email"
-                    value={store.settings.email}
-                    onChange={(e) =>
-                      setStore({
-                        ...store,
-                        settings: {
-                          ...store.settings,
-                          email: e.target.value,
-                        },
-                      })
-                    }
-                    className="w-full px-3.5 py-2.5 border border-[#D8CEB9] text-sm"
-                  />
+                  <h2 className="font-serif text-2xl sm:text-3xl text-[#263D32] flex items-center gap-2">
+                    <Mail className="w-6 h-6 text-[#65745A]" />
+                    <span>Envío de Correos con Estética TRAUM</span>
+                  </h2>
+                  <p className="text-xs sm:text-sm text-[#746657] mt-0.5">
+                    Cuando alguien solicita una salida o se anota, el sistema
+                    envía un correo al guía y un correo de confirmación al
+                    cliente.
+                  </p>
                 </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-[10px] uppercase tracking-[0.2em] font-semibold mb-1">
-                    Correo receptor de pedidos (Admin)
+                  <label className="block text-xs font-bold uppercase tracking-wider text-[#263D32] mb-1">
+                    Correo donde recibís los avisos (Guía)
                   </label>
                   <input
                     type="email"
-                    value={store.settings.notificationEmail || "traumflyfishing9@gmail.com"}
+                    value={store.settings.notificationEmail || ""}
                     onChange={(e) =>
                       setStore({
                         ...store,
                         settings: {
                           ...store.settings,
                           notificationEmail: e.target.value,
+                          email: e.target.value,
                         },
                       })
                     }
-                    className="w-full px-3.5 py-2.5 border border-[#D8CEB9] text-sm font-medium text-[#263D32]"
+                    className="w-full px-3.5 py-2.5 bg-[#FAF8F3] border border-[#D8CEB9] text-sm"
                   />
                 </div>
-              </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-[10px] uppercase tracking-[0.2em] font-semibold mb-1">
-                    Ubicación general de operación
+                  <label className="block text-xs font-bold uppercase tracking-wider text-[#263D32] mb-1">
+                    Contraseña de Aplicación de Gmail (16 letras)
                   </label>
                   <input
-                    type="text"
-                    value={store.settings.locationGeneral}
+                    type="password"
+                    value={store.settings.smtpAppPassword || ""}
                     onChange={(e) =>
                       setStore({
                         ...store,
                         settings: {
                           ...store.settings,
-                          locationGeneral: e.target.value,
+                          smtpAppPassword: e.target.value,
+                          smtpUser:
+                            store.settings.smtpUser ||
+                            store.settings.notificationEmail ||
+                            "traumflyfishing9@gmail.com",
                         },
                       })
                     }
-                    className="w-full px-3.5 py-2.5 border border-[#D8CEB9] text-sm"
+                    placeholder="Ej: abcd efgh ijkl mnop"
+                    className="w-full px-3.5 py-2.5 bg-[#FAF8F3] border border-[#D8CEB9] text-sm"
                   />
+                  <span className="text-[11px] text-[#746657] block mt-1">
+                    Se genera en tu cuenta de Google &rarr; Seguridad &rarr;
+                    Contraseñas de aplicaciones. Permite enviar correos
+                    directos tanto a vos como al cliente sin bloqueos.
+                  </span>
+                </div>
+              </div>
+
+              {/* BOTÓN PARA GUARDAR Y BOTÓN ENVIAR MAIL DE PRUEBA */}
+              <div className="p-4 bg-[#F2EFE6] border border-[#D8CEB9] flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+                <div className="flex-1 flex flex-col sm:flex-row sm:items-center gap-2">
+                  <input
+                    type="email"
+                    value={testEmailRecipient}
+                    onChange={(e) => setTestEmailRecipient(e.target.value)}
+                    placeholder="Destinatario del mail de prueba"
+                    className="px-3.5 py-2.5 bg-white border border-[#D8CEB9] text-xs sm:text-sm flex-1"
+                  />
+                  <button
+                    type="button"
+                    disabled={testingEmail}
+                    onClick={handleSendTestEmail}
+                    className="px-4 py-2.5 bg-[#263D32] hover:bg-[#3A4E3C] text-white text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-2 cursor-pointer"
+                  >
+                    <Send className="w-4 h-4" />
+                    <span>
+                      {testingEmail
+                        ? "Enviando prueba..."
+                        : "Enviar mail de prueba"}
+                    </span>
+                  </button>
                 </div>
 
+                <button
+                  type="button"
+                  disabled={busyAction}
+                  onClick={() =>
+                    handleSaveFullStore(
+                      "Configuración de correo y contacto guardada."
+                    )
+                  }
+                  className="px-4 py-2.5 bg-[#D8CEB9] hover:bg-[#c8bda5] text-[#263D32] text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-1.5 cursor-pointer"
+                >
+                  <Save className="w-4 h-4" />
+                  <span>Guardar ajustes</span>
+                </button>
+              </div>
+
+              {/* Resultado inmediato del mail de prueba */}
+              {testEmailResult && (
+                <div
+                  className={`p-4 border text-xs sm:text-sm ${
+                    testEmailResult.sent
+                      ? "bg-emerald-50 border-emerald-400 text-emerald-950"
+                      : "bg-amber-50 border-amber-400 text-amber-950"
+                  }`}
+                >
+                  <p className="font-bold">
+                    {testEmailResult.sent
+                      ? `¡Correo de prueba enviado correctamente por ${testEmailResult.channel}!`
+                      : "Atención: Falta activar la Contraseña de Aplicación de Gmail para el envío directo."}
+                  </p>
+                  {testEmailResult.errorDetails && (
+                    <p className="mt-1 text-xs opacity-90">
+                      Detalle técnico: {testEmailResult.errorDetails}
+                    </p>
+                  )}
+                </div>
+              )}
+
+              {/* Registro de últimos correos procesados */}
+              {(store.emailLogs || []).length > 0 && (
+                <div className="pt-2">
+                  <span className="text-xs font-bold uppercase tracking-wider text-[#746657] block mb-2">
+                    Últimos envíos registrados ({store.emailLogs?.length})
+                  </span>
+                  <div className="max-h-48 overflow-y-auto border border-[#D8CEB9] divide-y divide-[#D8CEB9] bg-[#FAF8F3] text-xs">
+                    {(store.emailLogs || []).slice(0, 10).map((log) => (
+                      <div
+                        key={log.id}
+                        className="p-2.5 flex flex-col sm:flex-row sm:items-center justify-between gap-1"
+                      >
+                        <div>
+                          <span
+                            className={`inline-block px-1.5 py-0.5 text-[10px] font-bold uppercase mr-2 ${
+                              log.guideSent || log.clientSent
+                                ? "bg-emerald-700 text-white"
+                                : "bg-amber-600 text-white"
+                            }`}
+                          >
+                            {log.guideSent || log.clientSent
+                              ? "Enviado"
+                              : "Guardado en panel"}
+                          </span>
+                          <strong className="text-[#263D32]">
+                            {log.subject}
+                          </strong>
+                          {log.errorDetails && (
+                            <p className="text-[11px] text-amber-900 mt-0.5">
+                              {log.errorDetails}
+                            </p>
+                          )}
+                        </div>
+                        <span className="text-[11px] text-[#746657] whitespace-nowrap">
+                          {new Date(log.createdAt).toLocaleString("es-AR")}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* BLOQUE 2: DATOS DE CONTACTO Y WHATSAPP */}
+            <div className="bg-white border border-[#D8CEB9] p-4 sm:p-6 shadow-sm space-y-4">
+              <h3 className="font-serif text-2xl text-[#263D32] border-b border-[#D8CEB9] pb-3">
+                Datos de Contacto y Clave del Panel
+              </h3>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div>
-                  <label className="block text-[10px] uppercase tracking-[0.2em] font-semibold mb-1">
-                    Número de WhatsApp
+                  <label className="block text-xs font-bold uppercase text-[#746657] mb-1">
+                    WhatsApp del Guía
                   </label>
                   <input
                     type="text"
@@ -2758,37 +2387,15 @@ export default function AdminDashboardPage() {
                         },
                       })
                     }
-                    className="w-full px-3.5 py-2.5 border border-[#D8CEB9] text-sm"
+                    className="w-full px-3 py-2.5 bg-[#FAF8F3] border border-[#D8CEB9] text-sm"
                   />
                 </div>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-[10px] uppercase tracking-[0.2em] font-semibold mb-1">
-                    Usuario de Instagram
+                  <label className="block text-xs font-bold uppercase text-[#746657] mb-1">
+                    Instagram URL
                   </label>
                   <input
                     type="text"
-                    value={store.settings.instagramHandle}
-                    onChange={(e) =>
-                      setStore({
-                        ...store,
-                        settings: {
-                          ...store.settings,
-                          instagramHandle: e.target.value,
-                        },
-                      })
-                    }
-                    className="w-full px-3.5 py-2.5 border border-[#D8CEB9] text-sm"
-                  />
-                </div>
-                <div>
-                  <label className="block text-[10px] uppercase tracking-[0.2em] font-semibold mb-1">
-                    Enlace de Instagram
-                  </label>
-                  <input
-                    type="url"
                     value={store.settings.instagramUrl}
                     onChange={(e) =>
                       setStore({
@@ -2799,182 +2406,467 @@ export default function AdminDashboardPage() {
                         },
                       })
                     }
-                    className="w-full px-3.5 py-2.5 border border-[#D8CEB9] text-sm"
+                    className="w-full px-3 py-2.5 bg-[#FAF8F3] border border-[#D8CEB9] text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold uppercase text-[#746657] mb-1">
+                    Clave de este panel (PIN)
+                  </label>
+                  <input
+                    type="text"
+                    value={store.settings.adminPin}
+                    onChange={(e) =>
+                      setStore({
+                        ...store,
+                        settings: {
+                          ...store.settings,
+                          adminPin: e.target.value,
+                        },
+                      })
+                    }
+                    className="w-full px-3 py-2.5 bg-[#FAF8F3] border border-[#D8CEB9] text-sm"
                   />
                 </div>
               </div>
-
-              {/* Datos Legales y Fiscales */}
-              <div className="pt-4 border-t border-[#D8CEB9] space-y-4">
-                <h4 className="font-editorial text-xl text-[#263D32]">
-                  Titularidad Legal y Habilitación Comercial
-                </h4>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-[10px] uppercase tracking-[0.2em] font-semibold mb-1">
-                      Titular / Razón Social
-                    </label>
-                    <input
-                      type="text"
-                      value={store.settings.legalOwnerName || ""}
-                      onChange={(e) =>
-                        setStore({
-                          ...store,
-                          settings: {
-                            ...store.settings,
-                            legalOwnerName: e.target.value,
-                          },
-                        })
-                      }
-                      className="w-full px-3.5 py-2.5 border border-[#D8CEB9] text-sm"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[10px] uppercase tracking-[0.2em] font-semibold mb-1">
-                      CUIT / Identificación Fiscal
-                    </label>
-                    <input
-                      type="text"
-                      value={store.settings.legalTaxId || ""}
-                      onChange={(e) =>
-                        setStore({
-                          ...store,
-                          settings: {
-                            ...store.settings,
-                            legalTaxId: e.target.value,
-                          },
-                        })
-                      }
-                      className="w-full px-3.5 py-2.5 border border-[#D8CEB9] text-sm"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[10px] uppercase tracking-[0.2em] font-semibold mb-1">
-                      Matrícula / Habilitación Guía de Pesca
-                    </label>
-                    <input
-                      type="text"
-                      value={store.settings.guideLicenseNumber || ""}
-                      onChange={(e) =>
-                        setStore({
-                          ...store,
-                          settings: {
-                            ...store.settings,
-                            guideLicenseNumber: e.target.value,
-                          },
-                        })
-                      }
-                      className="w-full px-3.5 py-2.5 border border-[#D8CEB9] text-sm"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[10px] uppercase tracking-[0.2em] font-semibold mb-1">
-                      Domicilio Legal y Jurisdicción
-                    </label>
-                    <input
-                      type="text"
-                      value={store.settings.legalAddress || ""}
-                      onChange={(e) =>
-                        setStore({
-                          ...store,
-                          settings: {
-                            ...store.settings,
-                            legalAddress: e.target.value,
-                          },
-                        })
-                      }
-                      className="w-full px-3.5 py-2.5 border border-[#D8CEB9] text-sm"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* Configuración Opcional de Google OAuth y SMTP Directo */}
-              <div className="pt-4 border-t border-[#D8CEB9] space-y-4">
-                <h4 className="font-editorial text-xl text-[#263D32]">
-                  Integración Google y Correo SMTP (Opcional)
-                </h4>
-                <p className="text-xs text-[#746657]">
-                  El envío a <strong>traumflyfishing9@gmail.com</strong> ya está activo por defecto. Si además deseas configurar una contraseña de aplicación de Gmail o un Client ID propio de Google Cloud, puedes ingresarlos aquí:
-                </p>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div className="sm:col-span-2">
-                    <label className="block text-[10px] uppercase tracking-[0.2em] font-semibold mb-1">
-                      Google OAuth Client ID (Opcional)
-                    </label>
-                    <input
-                      type="text"
-                      value={store.settings.googleClientId || ""}
-                      onChange={(e) =>
-                        setStore({
-                          ...store,
-                          settings: {
-                            ...store.settings,
-                            googleClientId: e.target.value,
-                          },
-                        })
-                      }
-                      placeholder="Ej. 1234567890-abc.apps.googleusercontent.com"
-                      className="w-full px-3.5 py-2.5 border border-[#D8CEB9] text-sm font-mono"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[10px] uppercase tracking-[0.2em] font-semibold mb-1">
-                      Usuario Gmail SMTP (Opcional)
-                    </label>
-                    <input
-                      type="email"
-                      value={store.settings.smtpUser || ""}
-                      onChange={(e) =>
-                        setStore({
-                          ...store,
-                          settings: {
-                            ...store.settings,
-                            smtpUser: e.target.value,
-                          },
-                        })
-                      }
-                      placeholder="traumflyfishing9@gmail.com"
-                      className="w-full px-3.5 py-2.5 border border-[#D8CEB9] text-sm"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[10px] uppercase tracking-[0.2em] font-semibold mb-1">
-                      Contraseña de Aplicación Gmail (App Password)
-                    </label>
-                    <input
-                      type="password"
-                      value={store.settings.smtpAppPassword || ""}
-                      onChange={(e) =>
-                        setStore({
-                          ...store,
-                          settings: {
-                            ...store.settings,
-                            smtpAppPassword: e.target.value,
-                          },
-                        })
-                      }
-                      placeholder="xxxx xxxx xxxx xxxx"
-                      className="w-full px-3.5 py-2.5 border border-[#D8CEB9] text-sm"
-                    />
-                  </div>
-                </div>
-              </div>
-
               <button
                 type="button"
                 onClick={() =>
-                  persistStore(store, "Configuración general y legal actualizada")
+                  handleSaveFullStore("Datos de contacto actualizados.")
                 }
-                className="px-6 py-3 bg-[#263D32] text-[#F2EFE6] hover:bg-[#65745A] text-xs uppercase tracking-[0.2em] font-semibold inline-flex items-center gap-2 cursor-pointer"
+                className="px-5 py-2.5 bg-[#263D32] text-white text-xs font-bold uppercase tracking-wider flex items-center gap-2 cursor-pointer"
               >
                 <Save className="w-4 h-4" />
-                <span>Guardar configuración</span>
+                <span>Guardar datos de contacto</span>
               </button>
             </div>
           </div>
         )}
-      </div>
+      </main>
+
+      {/* ================================================================= */}
+      {/* MODAL CORTO DE DÍA / CREAR O EDITAR SALIDA (2 CLICS)              */}
+      {/* ================================================================= */}
+      {dayModalOpen && (
+        <div
+          className="fixed inset-0 z-50 bg-black/65 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto"
+          onClick={() => setDayModalOpen(false)}
+        >
+          <div
+            className="bg-[#F2EFE6] border border-[#263D32] max-w-lg w-full p-5 sm:p-6 shadow-2xl space-y-5 my-8"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start justify-between gap-3 border-b border-[#D8CEB9] pb-3">
+              <div>
+                <span className="text-[11px] font-bold uppercase tracking-widest text-[#65745A] block">
+                  {modalMode === "edit"
+                    ? "Editar salida programada"
+                    : modalMode === "duplicate"
+                    ? "Duplicar salida en otra fecha"
+                    : "Programar salida en 2 clics"}
+                </span>
+                <h3 className="font-serif text-2xl text-[#263D32] font-bold">
+                  {formatReadableDate(modalDate)}
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setDayModalOpen(false)}
+                className="p-1.5 text-[#746657] hover:text-[#292D29]"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Si estamos en modo crear en ese día, mostrar también opción de bloquear/desbloquear en 1 clic */}
+            {modalMode === "create" && (
+              <div className="flex items-center justify-between gap-2 p-3 bg-white border border-[#D8CEB9]">
+                <span className="text-xs text-[#292D29]">
+                  {modalDateIsBlocked
+                    ? "Este día está bloqueado para pedidos."
+                    : "¿No salís a pescar este día?"}
+                </span>
+                <button
+                  type="button"
+                  onClick={async () => {
+                    await runAdminAction(
+                      {
+                        type: "TOGGLE_BLOCKED_DAY",
+                        date: modalDate,
+                        reason: "Día bloqueado por el guía",
+                      },
+                      modalDateIsBlocked
+                        ? `Día ${formatReadableDate(modalDate)} desbloqueado.`
+                        : `Día ${formatReadableDate(modalDate)} bloqueado.`
+                    );
+                  }}
+                  className={`px-3 py-1.5 text-xs font-bold uppercase tracking-wider cursor-pointer ${
+                    modalDateIsBlocked
+                      ? "bg-[#263D32] text-white"
+                      : "bg-stone-200 hover:bg-stone-300 text-stone-800"
+                  }`}
+                >
+                  {modalDateIsBlocked ? "Desbloquear día" : "Bloquear día"}
+                </button>
+              </div>
+            )}
+
+            {/* Si ya hay salidas activas en esa fecha, avisar */}
+            {modalMode === "create" && modalDateDepartures.length > 0 && (
+              <div className="p-3 bg-[#263D32]/10 border border-[#263D32]/30 text-xs text-[#263D32]">
+                <strong>Salidas ya cargadas en esta fecha:</strong>{" "}
+                {modalDateDepartures.map((d) => d.destination).join(", ")}
+              </div>
+            )}
+
+            <form onSubmit={handleSaveDepartureFromModal} className="space-y-4">
+              {/* Fecha (editable especialmente al duplicar o editar) */}
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-[#263D32] mb-1">
+                  Fecha de la salida
+                </label>
+                <input
+                  type="date"
+                  value={modalDate}
+                  onChange={(e) => setModalDate(e.target.value)}
+                  required
+                  className="w-full px-3.5 py-2.5 bg-white border border-[#D8CEB9] text-sm font-medium"
+                />
+              </div>
+
+              {/* Río o Lago (con los 12 destinos precargados) */}
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-[#263D32] mb-1">
+                  Río o Lago
+                </label>
+                <select
+                  value={
+                    riverList.includes(modalRiver) ? modalRiver : "__custom__"
+                  }
+                  onChange={(e) => {
+                    if (e.target.value !== "__custom__") {
+                      setModalRiver(e.target.value);
+                    }
+                  }}
+                  className="w-full px-3.5 py-2.5 bg-white border border-[#D8CEB9] text-sm font-medium mb-1.5"
+                >
+                  {riverList.map((rName) => (
+                    <option key={rName} value={rName}>
+                      {rName}
+                    </option>
+                  ))}
+                  <option value="__custom__">
+                    Otro sector / Escribir manualmente...
+                  </option>
+                </select>
+                <input
+                  type="text"
+                  value={modalRiver}
+                  onChange={(e) => setModalRiver(e.target.value)}
+                  placeholder="Nombre del río o tramo..."
+                  className="w-full px-3.5 py-2 bg-white border border-[#D8CEB9] text-xs text-[#746657]"
+                />
+              </div>
+
+              {/* Tipo de pesca y Cupos */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold uppercase tracking-wider text-[#263D32] mb-1">
+                    Tipo de pesca
+                  </label>
+                  <select
+                    value={modalType}
+                    onChange={(e) =>
+                      setModalType(e.target.value as ExperienceModality)
+                    }
+                    className="w-full px-3.5 py-2.5 bg-white border border-[#D8CEB9] text-sm"
+                  >
+                    {FISHING_MODALITIES.map((mod) => (
+                      <option key={mod} value={mod}>
+                        {mod}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold uppercase tracking-wider text-[#263D32] mb-1">
+                    Cupos totales (personas)
+                  </label>
+                  <div className="flex items-center gap-1.5">
+                    {[1, 2, 3, 4].map((num) => (
+                      <button
+                        key={num}
+                        type="button"
+                        onClick={() => setModalSpots(num)}
+                        className={`flex-1 py-2 text-xs font-bold border cursor-pointer ${
+                          modalSpots === num
+                            ? "bg-[#263D32] text-white border-[#263D32]"
+                            : "bg-white text-[#292D29] border-[#D8CEB9]"
+                        }`}
+                      >
+                        {num}
+                      </button>
+                    ))}
+                    <input
+                      type="number"
+                      min={1}
+                      max={12}
+                      value={modalSpots}
+                      onChange={(e) =>
+                        setModalSpots(Math.max(1, Number(e.target.value) || 1))
+                      }
+                      className="w-14 px-2 py-2 bg-white border border-[#D8CEB9] text-sm text-center"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Horario con atajos de 1 clic */}
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="text-xs font-bold uppercase tracking-wider text-[#263D32]">
+                    Horario
+                  </label>
+                  <div className="flex gap-1">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setModalStart("08:00");
+                        setModalEnd("17:30");
+                      }}
+                      className="px-2 py-0.5 bg-white border border-[#D8CEB9] text-[10px] hover:border-[#263D32] cursor-pointer"
+                    >
+                      Todo el día
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setModalStart("07:30");
+                        setModalEnd("13:00");
+                      }}
+                      className="px-2 py-0.5 bg-white border border-[#D8CEB9] text-[10px] hover:border-[#263D32] cursor-pointer"
+                    >
+                      Mañana
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setModalStart("13:30");
+                        setModalEnd("19:00");
+                      }}
+                      className="px-2 py-0.5 bg-white border border-[#D8CEB9] text-[10px] hover:border-[#263D32] cursor-pointer"
+                    >
+                      Tarde
+                    </button>
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <span className="text-[11px] text-[#746657] block mb-0.5">
+                      Hora inicio
+                    </span>
+                    <input
+                      type="time"
+                      value={modalStart}
+                      onChange={(e) => setModalStart(e.target.value)}
+                      className="w-full px-3 py-2 bg-white border border-[#D8CEB9] text-sm"
+                    />
+                  </div>
+                  <div>
+                    <span className="text-[11px] text-[#746657] block mb-0.5">
+                      Hora fin (opcional)
+                    </span>
+                    <input
+                      type="time"
+                      value={modalEnd}
+                      onChange={(e) => setModalEnd(e.target.value)}
+                      className="w-full px-3 py-2 bg-white border border-[#D8CEB9] text-sm"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Notas opcionales */}
+              <div>
+                <label className="block text-xs font-bold uppercase tracking-wider text-[#263D32] mb-1">
+                  Notas para los pescadores (opcional)
+                </label>
+                <input
+                  type="text"
+                  value={modalNotes}
+                  onChange={(e) => setModalNotes(e.target.value)}
+                  placeholder="Ej: Incluye almuerzo en la ribera y equipos..."
+                  className="w-full px-3.5 py-2.5 bg-white border border-[#D8CEB9] text-sm"
+                />
+              </div>
+
+              {/* Botones finales del modal */}
+              <div className="flex items-center justify-end gap-2 pt-3 border-t border-[#D8CEB9]">
+                <button
+                  type="button"
+                  onClick={() => setDayModalOpen(false)}
+                  className="px-4 py-3 bg-white border border-[#D8CEB9] text-xs font-bold uppercase tracking-wider cursor-pointer"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={busyAction}
+                  className="px-6 py-3 bg-[#263D32] hover:bg-[#3A4E3C] text-white text-xs font-bold uppercase tracking-wider flex items-center gap-2 cursor-pointer shadow-md"
+                >
+                  <Save className="w-4 h-4" />
+                  <span>
+                    {busyAction
+                      ? "Guardando..."
+                      : modalMode === "edit"
+                      ? "Guardar cambios"
+                      : "Guardar"}
+                  </span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ================================================================= */}
+      {/* MODAL DE CONFIRMACIÓN PARA LIMPIAR HISTORIAL DE SOLICITUDES       */}
+      {/* ================================================================= */}
+      {clearHistoryModalOpen && (
+        <div
+          className="fixed inset-0 z-50 bg-black/65 backdrop-blur-xs flex items-center justify-center p-4"
+          onClick={() => setClearHistoryModalOpen(false)}
+        >
+          <div
+            className="bg-[#F2EFE6] border border-[#263D32] max-w-md w-full p-6 shadow-2xl space-y-5"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start justify-between gap-3 border-b border-[#D8CEB9] pb-3">
+              <div>
+                <span className="text-[11px] font-bold uppercase tracking-widest text-red-800 block">
+                  Limpieza de bandeja
+                </span>
+                <h3 className="font-serif text-2xl text-[#263D32] font-bold">
+                  Limpiar historial de solicitudes
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setClearHistoryModalOpen(false)}
+                className="p-1 text-[#746657]"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="space-y-3">
+              <label
+                className={`block p-3.5 border cursor-pointer ${
+                  clearMode === "resolved"
+                    ? "bg-white border-[#263D32]"
+                    : "bg-[#FAF8F3] border-[#D8CEB9]"
+                }`}
+              >
+                <div className="flex items-start gap-2.5">
+                  <input
+                    type="radio"
+                    name="clearMode"
+                    checked={clearMode === "resolved"}
+                    onChange={() => setClearMode("resolved")}
+                    className="mt-1"
+                  />
+                  <div>
+                    <span className="text-sm font-bold text-[#263D32] block">
+                      Borrar solo las ya resueltas ({resolvedRequests.length})
+                    </span>
+                    <span className="text-xs text-[#746657] block mt-0.5">
+                      Elimina las aceptadas, rechazadas y reprogramadas. Mantiene
+                      intactas las {pendingRequests.length} pendiente(s).
+                    </span>
+                  </div>
+                </div>
+              </label>
+
+              <label
+                className={`block p-3.5 border cursor-pointer ${
+                  clearMode === "all"
+                    ? "bg-red-50 border-red-500"
+                    : "bg-[#FAF8F3] border-[#D8CEB9]"
+                }`}
+              >
+                <div className="flex items-start gap-2.5">
+                  <input
+                    type="radio"
+                    name="clearMode"
+                    checked={clearMode === "all"}
+                    onChange={() => setClearMode("all")}
+                    className="mt-1"
+                  />
+                  <div>
+                    <span className="text-sm font-bold text-red-900 block">
+                      Borrar todas las solicitudes ({allRequests.length})
+                    </span>
+                    <span className="text-xs text-red-800 block mt-0.5">
+                      Vacía por completo la bandeja de solicitudes.
+                    </span>
+                  </div>
+                </div>
+              </label>
+
+              {clearMode === "all" && pendingRequests.length > 0 && (
+                <div className="p-3.5 bg-red-100 border border-red-400 text-red-950 space-y-2">
+                  <div className="flex items-center gap-2 font-bold text-xs uppercase">
+                    <AlertTriangle className="w-4 h-4 text-red-800 flex-shrink-0" />
+                    <span>
+                      ¡Atención! Hay {pendingRequests.length} solicitud(es)
+                      pendiente(s) sin responder
+                    </span>
+                  </div>
+                  <label className="flex items-center gap-2 text-xs cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={confirmDeletePending}
+                      onChange={(e) =>
+                        setConfirmDeletePending(e.target.checked)
+                      }
+                    />
+                    <span>
+                      Sí, entiendo y quiero borrar también las solicitudes
+                      pendientes.
+                    </span>
+                  </label>
+                </div>
+              )}
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-3 border-t border-[#D8CEB9]">
+              <button
+                type="button"
+                onClick={() => setClearHistoryModalOpen(false)}
+                className="px-4 py-2.5 bg-white border border-[#D8CEB9] text-xs font-bold uppercase tracking-wider cursor-pointer"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                disabled={
+                  busyAction ||
+                  (clearMode === "resolved" && resolvedRequests.length === 0) ||
+                  (clearMode === "all" &&
+                    pendingRequests.length > 0 &&
+                    !confirmDeletePending)
+                }
+                onClick={handleConfirmClearHistory}
+                className="px-5 py-2.5 bg-red-800 hover:bg-red-900 disabled:opacity-40 text-white text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 cursor-pointer"
+              >
+                <Trash2 className="w-4 h-4" />
+                <span>Confirmar borrado</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

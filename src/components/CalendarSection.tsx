@@ -176,8 +176,15 @@ export default function CalendarSection({
   const filteredActiveDepartures = useMemo(() => {
     return departures.filter((dep) => {
       if (dep.status === "cancelada") return false;
-      if (filterRiver !== "ALL" && !dep.destination.includes(filterRiver)) {
-        return false;
+      if (filterRiver !== "ALL") {
+        const depLower = dep.destination.toLowerCase();
+        const filterLower = filterRiver.toLowerCase();
+        if (
+          !depLower.includes(filterLower) &&
+          !filterLower.includes(depLower)
+        ) {
+          return false;
+        }
       }
       if (filterType !== "ALL" && dep.experienceType !== filterType) {
         return false;

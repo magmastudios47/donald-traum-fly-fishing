@@ -100,6 +100,33 @@ export interface SiteImagesConfig {
   thoreauQuoteBg: string;
 }
 
+export interface GalleryImageItem {
+  id: string;
+  imageUrl: string;
+  caption?: string;
+  order: number;
+  createdAt: string;
+}
+
+export interface EmailLogItem {
+  id: string;
+  createdAt: string;
+  eventType:
+    | "solicitud_recibida"
+    | "anotacion_confirmada"
+    | "respuesta_solicitud"
+    | "cancelacion_salida"
+    | "arrepentimiento"
+    | "mail_prueba";
+  subject: string;
+  recipientGuide: string;
+  recipientClient?: string;
+  guideSent: boolean;
+  clientSent: boolean;
+  channel: string;
+  errorDetails?: string;
+}
+
 /**
  * SALIDA PROGRAMADA (Salida)
  * Datos: fecha, hora_inicio, hora_fin (opcional), río (destination),
@@ -315,6 +342,8 @@ export interface TraumStoreData {
   blockedDays: BlockedDay[];
   waitlistAlerts: WaitlistPromotionAlert[];
   reviews: ReviewItem[];
+  gallery: GalleryImageItem[];
+  emailLogs?: EmailLogItem[];
   inquiries: BookingInquiry[];
   cookieConsents?: CookieConsentRecord[];
   regretRequests?: RegretRequestItem[];

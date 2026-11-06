@@ -14,6 +14,7 @@ import {
   sendEnrollmentNotificationEmail,
   sendGuideResponseToRequestEmail,
   sendRegretNotificationEmail,
+  sendTestDiagnosticEmail,
 } from "@/lib/email-service";
 import {
   BlockedDay,
@@ -22,7 +23,9 @@ import {
   CustomRequestStatus,
   CustomTripRequest,
   DepartureEnrollment,
+  EmailLogItem,
   ExperienceModality,
+  GalleryImageItem,
   PreferredScheduleType,
   RegretRequestItem,
   ReviewItem,
@@ -333,15 +336,26 @@ export async function POST(request: NextRequest) {
         savedStore.settings
       );
 
+      const finalStore = await saveTraumStore({
+        ...savedStore,
+        emailLogs: [emailRes.logEntry, ...(savedStore.emailLogs || [])].slice(
+          0,
+          60
+        ),
+      });
+
       return NextResponse.json({
         ok: true,
         enrollment: result.enrollment,
-        departure: savedStore.departures.find(
+        departure: finalStore.departures.find(
           (d) => d.id === result.departure.id
         ),
         emailSent: emailRes.sent,
+        guideEmailSent: emailRes.guideSent,
+        clientEmailSent: emailRes.clientSent,
         emailChannel: emailRes.channel,
-        store: savedStore,
+        emailError: emailRes.errorDetails,
+        store: finalStore,
       });
     }
 
@@ -479,14 +493,25 @@ export async function POST(request: NextRequest) {
         savedStore.settings
       );
 
+      const finalStore = await saveTraumStore({
+        ...savedStore,
+        emailLogs: [emailRes.logEntry, ...(savedStore.emailLogs || [])].slice(
+          0,
+          60
+        ),
+      });
+
       return NextResponse.json({
         ok: true,
         customRequest: result.customRequest,
         confirmationMessage:
           "El guía te va a contactar para coordinar. No se requiere seña ni pago por este medio.",
         emailSent: emailRes.sent,
+        guideEmailSent: emailRes.guideSent,
+        clientEmailSent: emailRes.clientSent,
         emailChannel: emailRes.channel,
-        store: savedStore,
+        emailError: emailRes.errorDetails,
+        store: finalStore,
       });
     }
 
@@ -1082,15 +1107,25 @@ export async function POST(request: NextRequest) {
         }
       );
 
-      await sendGuideResponseToRequestEmail(
+      const emailRes = await sendGuideResponseToRequestEmail(
         result.customRequest,
         savedStore.settings
       );
 
+      const finalStore = await saveTraumStore({
+        ...savedStore,
+        emailLogs: [emailRes.logEntry, ...(savedStore.emailLogs || [])].slice(
+          0,
+          60
+        ),
+      });
+
       return NextResponse.json({
         ok: true,
         customRequest: result.customRequest,
-        store: savedStore,
+        emailSent: emailRes.sent,
+        emailError: emailRes.errorDetails,
+        store: finalStore,
       });
     }
 
@@ -1282,6 +1317,266 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({
         ok: true,
         blocked: result.blocked,
+        store: savedStore,
+      });
+    }
+
+    // =========================================================================
+    // J) LIMPIAR HISTORIAL DE SOLICITUDES (CLEAR_REQUESTS_HISTORY)
+    // =========================================================================
+    if (actionType === "CLEAR_REQUESTS_HISTORY") {
+      const mode = String(payload.mode || "resolved"); // "resolved" | "all"
+      const confirmPending = Boolean(payload.confirmPending);
+
+      const { store: savedStore, result } = await runStoreTransaction(
+        async (current) => {
+          const allRequests = current.customRequests || [];
+          const pendingRequests = allRequests.filter(
+            (r) => r.status === "pendiente"
+          );
+          const resolvedRequests = allRequests.filter(
+            (r) => r.status !== "pendiente"
+          );
+
+          if (mode === "all") {
+            if (pendingRequests.length > 0 && !confirmPending) {
+              throw new BusinessRuleError(
+                `Hay ${pendingRequests.length} solicitud(es) pendiente(s) sin responder. Confirmá explícitamente si querés borrar también las pendientes.`,
+                409,
+                {
+                  code: "PENDING_WARNING",
+                  pendingCount: pendingRequests.length,
+                  totalCount: allRequests.length,
+                }
+              );
+            }
+            return {
+              nextStore: {
+                ...current,
+                customRequests: [],
+              },
+              result: {
+                deletedCount: allRequests.length,
+                mode: "all",
+              },
+            };
+          }
+
+          // Modo "resolved": borrar solo las ya resueltas (aceptadas, rechazadas, reprogramadas)
+          return {
+            nextStore: {
+              ...current,
+              customRequests: pendingRequests,
+            },
+            result: {
+              deletedCount: resolvedRequests.length,
+              mode: "resolved",
+            },
+          };
+        }
+      );
+
+      return NextResponse.json({
+        ok: true,
+        deletedCount: result.deletedCount,
+        mode: result.mode,
+        store: savedStore,
+      });
+    }
+
+    // =========================================================================
+    // K) ENVIAR MAIL DE PRUEBA Y DIAGNÓSTICO (SEND_TEST_EMAIL)
+    // =========================================================================
+    if (actionType === "SEND_TEST_EMAIL") {
+      const current = await getTraumStore();
+      const customRecipient = payload.recipientEmail
+        ? String(payload.recipientEmail).trim()
+        : undefined;
+
+      // Si mandan credenciales temporales para probar antes de guardar
+      const tempSettings = {
+        ...current.settings,
+        ...(payload.smtpUser !== undefined
+          ? { smtpUser: String(payload.smtpUser) }
+          : {}),
+        ...(payload.smtpAppPassword !== undefined
+          ? { smtpAppPassword: String(payload.smtpAppPassword) }
+          : {}),
+        ...(payload.resendApiKey !== undefined
+          ? { resendApiKey: String(payload.resendApiKey) }
+          : {}),
+      };
+
+      const emailRes = await sendTestDiagnosticEmail(
+        tempSettings,
+        customRecipient
+      );
+
+      const savedStore = await saveTraumStore({
+        ...current,
+        settings: tempSettings,
+        emailLogs: [emailRes.logEntry, ...(current.emailLogs || [])].slice(
+          0,
+          60
+        ),
+      });
+
+      return NextResponse.json({
+        ok: true,
+        sent: emailRes.sent,
+        channel: emailRes.channel,
+        errorDetails: emailRes.errorDetails,
+        logEntry: emailRes.logEntry,
+        store: savedStore,
+      });
+    }
+
+    // =========================================================================
+    // L) GESTIÓN DE GALERÍA DE FOTOS (MANAGE_GALLERY)
+    // =========================================================================
+    if (actionType === "MANAGE_GALLERY") {
+      const subAction = String(payload.subAction || "ADD");
+
+      const { store: savedStore, result } = await runStoreTransaction<
+        Record<string, unknown>
+      >(
+        async (current) => {
+          const currentGallery: GalleryImageItem[] = [
+            ...(current.gallery || []),
+          ].sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+
+          if (subAction === "ADD") {
+            const rawItems: Array<{ imageUrl: string; caption?: string }> =
+              Array.isArray(payload.items)
+                ? payload.items
+                : payload.imageUrl
+                ? [
+                    {
+                      imageUrl: String(payload.imageUrl),
+                      caption: payload.caption
+                        ? String(payload.caption)
+                        : undefined,
+                    },
+                  ]
+                : [];
+
+            if (rawItems.length === 0) {
+              throw new BusinessRuleError(
+                "Seleccioná al menos una imagen válida para subir a la galería.",
+                400
+              );
+            }
+
+            const nowIso = new Date().toISOString();
+            const addedItems: GalleryImageItem[] = rawItems.map((it, idx) => ({
+              id: `gal-${Date.now()}-${idx}-${Math.floor(Math.random() * 1000)}`,
+              imageUrl: String(it.imageUrl),
+              caption: it.caption ? String(it.caption).trim() : "",
+              order: currentGallery.length + idx,
+              createdAt: nowIso,
+            }));
+
+            const updatedGallery = [...currentGallery, ...addedItems].map(
+              (item, index) => ({
+                ...item,
+                order: index,
+              })
+            );
+
+            return {
+              nextStore: {
+                ...current,
+                gallery: updatedGallery,
+              },
+              result: { addedCount: addedItems.length },
+            };
+          }
+
+          if (subAction === "DELETE") {
+            const imageId = String(payload.imageId || "").trim();
+            const filtered = currentGallery
+              .filter((g) => g.id !== imageId)
+              .map((item, index) => ({ ...item, order: index }));
+
+            return {
+              nextStore: {
+                ...current,
+                gallery: filtered,
+              },
+              result: { deletedId: imageId },
+            };
+          }
+
+          if (subAction === "REORDER") {
+            if (Array.isArray(payload.orderedIds)) {
+              const idOrder = payload.orderedIds.map(String);
+              const byId = new Map(currentGallery.map((g) => [g.id, g]));
+              const reordered: GalleryImageItem[] = [];
+              for (const id of idOrder) {
+                const found = byId.get(id);
+                if (found) {
+                  reordered.push(found);
+                  byId.delete(id);
+                }
+              }
+              for (const rem of byId.values()) {
+                reordered.push(rem);
+              }
+              const normalized = reordered.map((item, idx) => ({
+                ...item,
+                order: idx,
+              }));
+              return {
+                nextStore: { ...current, gallery: normalized },
+                result: { reordered: true },
+              };
+            }
+
+            const imageId = String(payload.imageId || "").trim();
+            const direction = String(payload.direction || "LEFT"); // "LEFT" | "RIGHT"
+            const idx = currentGallery.findIndex((g) => g.id === imageId);
+            if (idx !== -1) {
+              const swapIdx = direction === "LEFT" ? idx - 1 : idx + 1;
+              if (swapIdx >= 0 && swapIdx < currentGallery.length) {
+                const copy = [...currentGallery];
+                const temp = copy[idx];
+                copy[idx] = copy[swapIdx];
+                copy[swapIdx] = temp;
+                const normalized = copy.map((item, i) => ({
+                  ...item,
+                  order: i,
+                }));
+                return {
+                  nextStore: { ...current, gallery: normalized },
+                  result: { reordered: true },
+                };
+              }
+            }
+            return {
+              nextStore: current,
+              result: { reordered: false },
+            };
+          }
+
+          if (subAction === "UPDATE_CAPTION") {
+            const imageId = String(payload.imageId || "").trim();
+            const caption = String(payload.caption || "").trim();
+            const updated = currentGallery.map((g) =>
+              g.id === imageId ? { ...g, caption } : g
+            );
+            return {
+              nextStore: { ...current, gallery: updated },
+              result: { updated: true },
+            };
+          }
+
+          return { nextStore: current, result: {} };
+        }
+      );
+
+      return NextResponse.json({
+        ok: true,
+        ...result,
         store: savedStore,
       });
     }

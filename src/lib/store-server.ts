@@ -271,21 +271,37 @@ function normalizeStore(
     mergedSettings.web3FormsAccessKey = "fa183ece-13f6-4360-8085-ff84ba3ea870";
   }
 
-  const normalizedDestinations = (
-    parsed.destinations || initialTraumData.destinations
-  ).map((dest) => {
-    if (dest.id === "dest-malleo" && Math.abs(dest.lat - -39.7765) < 0.01) {
+  const officialById = new Map(
+    initialTraumData.destinations.map((d) => [d.id, d])
+  );
+  const existingDests = parsed.destinations || initialTraumData.destinations;
+  const updatedExistingDests = existingDests.map((dest) => {
+    const official = officialById.get(dest.id);
+    if (official) {
       return {
         ...dest,
-        lat: -39.6225,
-        lng: -71.1865,
-        location: "Parque Nacional Lanín · Ruta Prov. 23, Neuquén",
-        distanceFromJunin:
-          "35 km al norte de Junín de los Andes por RP 60 / RP 23",
+        lat: official.lat,
+        lng: official.lng,
+        location: official.location,
+        distanceFromJunin: official.distanceFromJunin,
+        waterType: official.waterType,
       };
     }
     return dest;
   });
+
+  const existingIds = new Set(updatedExistingDests.map((d) => d.id));
+  const missingOfficialDests = initialTraumData.destinations.filter(
+    (d) => !existingIds.has(d.id)
+  );
+  const normalizedDestinations = [
+    ...updatedExistingDests,
+    ...missingOfficialDests,
+  ];
+
+  const normalizedGallery = Array.isArray(parsed.gallery)
+    ? [...parsed.gallery].sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
+    : initialTraumData.gallery;
 
   const base: TraumStoreData = {
     ...initialTraumData,
@@ -294,6 +310,10 @@ function normalizeStore(
     updatedAt: updatedAt ?? parsed.updatedAt ?? new Date().toISOString(),
     settings: mergedSettings,
     destinations: normalizedDestinations,
+    gallery: normalizedGallery,
+    emailLogs: Array.isArray(parsed.emailLogs)
+      ? parsed.emailLogs.slice(0, 60)
+      : [],
     siteImages: {
       ...initialTraumData.siteImages,
       ...(parsed.siteImages || {}),
