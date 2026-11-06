@@ -1,4 +1,6 @@
 {
+  "version": 24,
+  "updatedAt": "2026-11-05T16:52:00.646Z",
   "settings": {
     "brandName": "TRAUM",
     "brandSubtitle": "FLY CAST PATAGONIA",
@@ -6,12 +8,22 @@
     "secondaryTagline": "Capturando sueños en los ríos y lagos del Neuquén.",
     "locationGeneral": "Junín de los Andes, Provincia del Neuquén — Patagonia Argentina",
     "whatsappNumber": "+54 9 2972 40-0000",
-    "email": "contacto@traumflycast.com",
+    "email": "traumflyfishing9@gmail.com",
+    "notificationEmail": "traumflyfishing9@gmail.com",
     "instagramHandle": "@traum.flycast",
     "instagramUrl": "https://instagram.com",
     "showDemoDepartures": true,
     "showReferenceNoticeOnDestinations": false,
-    "adminPin": "traum2026"
+    "adminPin": "traum2026",
+    "legalOwnerName": "Donald Traum — TRAUM Fly Cast Patagonia",
+    "legalTaxId": "CUIT / Reg. Fiscal en trámite — Provincia del Neuquén",
+    "legalAddress": "Junín de los Andes (CP 8371), Provincia del Neuquén, República Argentina",
+    "guideLicenseNumber": "Guía de Pesca Deportiva Habilitado — Reglamento Continental Patagónico",
+    "googleClientId": "",
+    "web3FormsAccessKey": "fa183ece-13f6-4360-8085-ff84ba3ea870",
+    "smtpUser": "traumflyfishing9@gmail.com",
+    "smtpAppPassword": "",
+    "resendApiKey": ""
   },
   "siteImages": {
     "heroBg": "https://upload.wikimedia.org/wikipedia/commons/a/a9/Lago_Huechulafquen_e_lado_norte_do_Vulc%C3%A3o_Lanin_-_panoramio.jpg",
@@ -24,8 +36,8 @@
   },
   "paymentConfig": {
     "enabled": true,
-    "title": "Medios de Pago y Confirmación de Salidas",
-    "subtitle": "Flexibilidad y transparencia para asegurar tu fecha en la Patagonia",
+    "title": "Medios de Pago y Reserva con Seña",
+    "subtitle": "Transparencia y respaldo comercial para asegurar tu fecha en la Patagonia",
     "depositPercentage": 30,
     "acceptedMethods": [
       "Transferencia Bancaria (Pesos ARS / USD)",
@@ -35,281 +47,622 @@
     ],
     "bankName": "Banco Provincia del Neuquén / Banco Galicia",
     "bankAlias": "TRAUM.FLY.PATAGONIA",
-    "bankCbu": "0070000000000000000000",
-    "bankHolder": "TRAUM FLY CAST PATAGONIA",
+    "bankCbu": "",
+    "bankHolder": "DONALD TRAUM — TRAUM FLY FISHING",
     "mercadoPagoLink": "",
     "internationalPaymentLink": "",
-    "cancellationNotice": "Las reservas se bloquean en el calendario mediante una seña porcentual y el saldo restante se abona previo al inicio de la salida. Reprogramación sin cargo sujeta a condiciones hidrometeorológicas extremas."
+    "cancellationNotice": "Las reservas se bloquean en el calendario mediante la integración del porcentaje de seña indicado y el saldo restante se abona previo al inicio de la salida. Los datos bancarios (Alias y Titular) y links de pago se habilitan automáticamente al contratar cualquiera de los servicios cargados en la página."
   },
   "experiences": [
     {
       "id": "exp-vadeo",
-      "number": "01",
       "title": "Pesca de vadeo",
-      "subtitle": "Lectura íntima del agua y conexión directa con el río",
-      "description": "Una experiencia de pesca caminando por las orillas y dentro de los ríos, explorando sectores cuidadosamente seleccionados.",
-      "extendedDescription": "Transmitimos una experiencia cercana al agua, donde el pescador puede leer las corrientes, observar el comportamiento de los peces y disfrutar de la naturaleza desde otra perspectiva. Ideal para quienes disfrutan del acecho técnico, la precisión en el lanzamiento y el silencio de las correderas patagónicas.",
-      "modality": "Pesca de vadeo",
+      "number": "01",
       "imageUrl": "https://upload.wikimedia.org/wikipedia/commons/0/06/Flyfishing.jpg",
+      "modality": "Pesca de vadeo",
+      "subtitle": "Lectura íntima del agua y conexión directa con el río",
       "highlights": [
         "Acceso a correderas, pozones y bancos de arena seleccionados según la época",
         "Lectura detallada de aguas, entomología local y selección de moscas",
         "Ritmo pausado y personalizado adaptado a la técnica del pescador"
       ],
-      "durationPlaceholder": "Jornada completa o media jornada",
+      "priceLabel": "Tarifa según cantidad de jornadas y participantes",
+      "description": "Una experiencia de pesca caminando por las orillas y dentro de los ríos, explorando sectores cuidadosamente seleccionados.",
+      "paymentLink": "",
       "capacityPlaceholder": "1 a 2 pescadores por guía",
-      "paymentLink": ""
+      "durationPlaceholder": "Jornada completa o media jornada",
+      "extendedDescription": "Transmitimos una experiencia cercana al agua, donde el pescador puede leer las corrientes, observar el comportamiento de los peces y disfrutar de la naturaleza desde otra perspectiva. Ideal para quienes disfrutan del acecho técnico, la precisión en el lanzamiento y el silencio de las correderas patagónicas."
     },
     {
       "id": "exp-balsa",
-      "number": "02",
       "title": "Pesca en balsa",
-      "subtitle": "Navegación silenciosa hacia sectores vírgenes de la cordillera",
-      "description": "Recorridos por ríos patagónicos a bordo de balsas preparadas para jornadas de pesca.",
-      "extendedDescription": "Una experiencia que combina navegación, paisajes únicos y oportunidades de pesca en sectores de difícil acceso. Flotar un río patagónico permite cubrir kilómetros de agua prístina, alternando deriva desde la embarcación con paradas estratégicas de vadeo en islas y barrancas.",
-      "modality": "Pesca en balsa",
+      "number": "02",
       "imageUrl": "https://upload.wikimedia.org/wikipedia/commons/f/f3/ParksFlyShopDriftBoat.jpg",
+      "modality": "Pesca en balsa",
+      "subtitle": "Navegación silenciosa hacia sectores vírgenes de la cordillera",
       "highlights": [
         "Balsas equipadas con marcos de remo profesionales y asientos ergonómicos",
         "Alcance a tramos exclusivos lejos de los accesos públicos convencionales",
         "Combinación dinámica de pesca desde la balsa y vadeo en puntos clave"
       ],
-      "durationPlaceholder": "Jornada completa según tramo y caudal",
+      "priceLabel": "Flotada guiada · Consultar tarifa vigente por balsa",
+      "description": "Recorridos por ríos patagónicos a bordo de balsas preparadas para jornadas de pesca.",
+      "paymentLink": "",
       "capacityPlaceholder": "Hasta 2 pescadores por embarcación",
-      "paymentLink": ""
+      "durationPlaceholder": "Jornada completa según tramo y caudal",
+      "extendedDescription": "Una experiencia que combina navegación, paisajes únicos y oportunidades de pesca en sectores de difícil acceso. Flotar un río patagónico permite cubrir kilómetros de agua prístina, alternando deriva desde la embarcación con paradas estratégicas de vadeo en islas y barrancas."
     },
     {
       "id": "exp-personalizada",
-      "number": "03",
       "title": "Salidas personalizadas",
-      "subtitle": "Un itinerario diseñado a la medida de tu propio sueño",
-      "description": "Experiencias diseñadas según el nivel, los objetivos y las preferencias de cada pescador.",
-      "extendedDescription": "Desde quienes quieren iniciarse en la pesca con mosca hasta pescadores experimentados que buscan nuevos desafíos. Diseñamos la propuesta contemplando tus expectativas técnicas, el ritmo de viaje deseado y la compañía con quien elijas compartir el río.",
-      "modality": "Salida personalizada",
+      "number": "03",
       "imageUrl": "https://upload.wikimedia.org/wikipedia/commons/6/6d/Fly_fishing_on_White_River_near_Cotter%2C_AR.jpg",
+      "modality": "Salida personalizada",
+      "subtitle": "Un itinerario diseñado a la medida de tu propio sueño",
       "highlights": [
         "Clínicas de iniciación al lanzamiento y lectura de aguas en terreno real",
         "Programas de múltiples días combinando distintos ambientes del Neuquén",
         "Salidas privadas individuales, para dos personas o grupos a medida"
       ],
-      "durationPlaceholder": "1 o más jornadas a medida",
+      "priceLabel": "Cotización personalizada según itinerario",
+      "description": "Experiencias diseñadas según el nivel, los objetivos y las preferencias de cada pescador.",
+      "paymentLink": "",
       "capacityPlaceholder": "Individual, Dúo o Grupal",
-      "paymentLink": ""
+      "durationPlaceholder": "1 o más jornadas a medida",
+      "extendedDescription": "Desde quienes quieren iniciarse en la pesca con mosca hasta pescadores experimentados que buscan nuevos desafíos. Diseñamos la propuesta contemplando tus expectativas técnicas, el ritmo de viaje deseado y la compañía con quien elijas compartir el río."
     }
   ],
   "destinations": [
     {
       "id": "dest-malleo",
+      "lat": -39.6225,
+      "lng": -71.1865,
       "name": "Río Malleo",
-      "location": "Junín de los Andes, Neuquén",
       "imageUrl": "https://upload.wikimedia.org/wikipedia/commons/6/65/Malleo_River.JPG",
-      "description": "Un clásico mundial del vadeo patagónico. Nace en el Lago Tromen y serpentea entre sauces, estepa y vistas imponentes al Volcán Lanín, ofreciendo aguas cristalinas ideales para la pesca con mosca seca y ninfas.",
+      "location": "Parque Nacional Lanín · Ruta Prov. 23, Neuquén",
+      "waterType": "Río",
       "modalities": [
         "Pesca de vadeo",
         "Salida personalizada"
       ],
+      "description": "Un clásico mundial del vadeo patagónico. Nace en el Lago Tromen y serpentea entre sauces, estepa y vistas imponentes al Volcán Lanín, ofreciendo aguas cristalinas ideales para la pesca con mosca seca y ninfas.",
       "isReferenceDemo": false,
-      "lat": -39.7765,
-      "lng": -71.2248,
-      "distanceFromJunin": "28 km al norte de Junín de los Andes",
-      "waterType": "Río"
+      "distanceFromJunin": "35 km al norte de Junín de los Andes por RP 60 / RP 23"
     },
     {
       "id": "dest-chimehuin",
+      "lat": -39.9182,
+      "lng": -71.0775,
       "name": "Río Chimehuín",
-      "location": "Junín de los Andes, Neuquén",
       "imageUrl": "https://upload.wikimedia.org/wikipedia/commons/9/9e/R%C3%ADo_Chimehuin_Neuquen_-_Argentina.jpg",
-      "description": "Cuna histórica de la pesca con mosca en Argentina. Sus aguas verde esmeralda, sus correderas profundas y su célebre Boca y Garganta del Diablo albergan truchas marrones y arcoíris de carácter inolvidable.",
+      "location": "Junín de los Andes, Neuquén",
+      "waterType": "Río",
       "modalities": [
         "Pesca de vadeo",
         "Pesca en balsa",
         "Salida personalizada"
       ],
+      "description": "Cuna histórica de la pesca con mosca en Argentina. Sus aguas verde esmeralda, sus correderas profundas y su célebre Boca y Garganta del Diablo albergan truchas marrones y arcoíris de carácter inolvidable.",
       "isReferenceDemo": false,
-      "lat": -39.9182,
-      "lng": -71.0775,
-      "distanceFromJunin": "Atraviesa Junín de los Andes (0 a 25 km)",
-      "waterType": "Río"
+      "distanceFromJunin": "Atraviesa Junín de los Andes (0 a 25 km)"
     },
     {
       "id": "dest-collon-cura",
+      "lat": -40.2335,
+      "lng": -70.6652,
       "name": "Río Collón Curá",
-      "location": "Sur del Neuquén, Patagonia",
       "imageUrl": "https://upload.wikimedia.org/wikipedia/commons/2/21/RioCollonCura.jpg",
-      "description": "Ancho, generoso y rodeado de formaciones rocosas y estepa infinita. Sus múltiples brazos e islas lo convierten en un escenario extraordinario para flotadas en balsa y jornadas de gran actividad.",
+      "location": "Sur del Neuquén, Patagonia",
+      "waterType": "Río",
       "modalities": [
         "Pesca en balsa",
         "Pesca de vadeo",
         "Salida personalizada"
       ],
+      "description": "Ancho, generoso y rodeado de formaciones rocosas y estepa infinita. Sus múltiples brazos e islas lo convierten en un escenario extraordinario para flotadas en balsa y jornadas de gran actividad.",
       "isReferenceDemo": false,
-      "lat": -40.2335,
-      "lng": -70.6652,
-      "distanceFromJunin": "45 km al sureste de Junín de los Andes",
-      "waterType": "Río"
+      "distanceFromJunin": "45 km al sureste de Junín de los Andes"
     },
     {
       "id": "dest-alumine",
+      "lat": -39.5521,
+      "lng": -70.9314,
       "name": "Río Aluminé",
-      "location": "Corredor Cordillerano, Neuquén",
       "imageUrl": "https://upload.wikimedia.org/wikipedia/commons/e/e9/Rio_alumine_en_invierno.jpg",
-      "description": "Aguas de montaña rodeadas de araucarias milenarias y cañadones de piedra. Sus correderas ágiles y pozones profundos brindan jornadas memorables de flotada.",
+      "location": "Corredor Cordillerano, Neuquén",
+      "waterType": "Río",
       "modalities": [
         "Pesca en balsa",
         "Salida personalizada"
       ],
+      "description": "Aguas de montaña rodeadas de araucarias milenarias y cañadones de piedra. Sus correderas ágiles y pozones profundos brindan jornadas memorables de flotada.",
       "isReferenceDemo": false,
-      "lat": -39.5521,
-      "lng": -70.9314,
-      "distanceFromJunin": "55 km hacia el norte por RP 23",
-      "waterType": "Río"
+      "distanceFromJunin": "55 km hacia el norte por RP 23"
     },
     {
       "id": "dest-huechulafquen",
+      "lat": -39.7938,
+      "lng": -71.2094,
       "name": "Lago Huechulafquen y Boca del Chimehuín",
-      "location": "Parque Nacional Lanín, Neuquén",
       "imageUrl": "https://upload.wikimedia.org/wikipedia/commons/b/b8/RIO_CHIMEHUIN_100_METROS.JPG",
-      "description": "Uno de los espejos lacustres más imponentes de la Patagonia al pie del Volcán Lanín, donde nace el mítico Río Chimehuín en un entorno de bosque andino patagónico.",
+      "location": "Parque Nacional Lanín, Neuquén",
+      "waterType": "Lago",
       "modalities": [
         "Pesca de vadeo",
         "Pesca en balsa",
         "Salida personalizada"
       ],
+      "description": "Uno de los espejos lacustres más imponentes de la Patagonia al pie del Volcán Lanín, donde nace el mítico Río Chimehuín en un entorno de bosque andino patagónico.",
       "isReferenceDemo": false,
-      "lat": -39.7938,
-      "lng": -71.2094,
-      "distanceFromJunin": "24 km de Junín de los Andes por RP 61",
-      "waterType": "Lago"
+      "distanceFromJunin": "24 km de Junín de los Andes por RP 61"
     }
   ],
   "services": [
     {
       "id": "srv-guia",
+      "note": "Incluido en todas las modalidades",
       "title": "Acompañamiento y guía de pesca",
-      "description": "Conducción profesional durante toda la jornada, lectura de aguas en tiempo real y asistencia permanente en cada situación de pesca.",
-      "iconName": "Compass",
       "enabled": true,
-      "note": "Incluido en todas las modalidades"
+      "iconName": "Compass",
+      "priceLabel": "Servicio base de guiada",
+      "description": "Conducción profesional durante toda la jornada, lectura de aguas en tiempo real y asistencia permanente en cada situación de pesca."
     },
     {
       "id": "srv-tecnico",
-      "title": "Asesoramiento técnico",
-      "description": "Perfeccionamiento de lanzamiento (cast), elección de líderes, lectura de eclosiones y presentación de moscas secas, ninfas y streamers.",
-      "iconName": "Award",
+      "note": "Adaptado a tu búsqueda técnica",
+      "title": "Asesoramiento técnico y clínica de cast",
       "enabled": true,
-      "note": "Adaptado a tu búsqueda técnica"
+      "iconName": "Award",
+      "priceLabel": "Clínica personalizada / Guiada técnica",
+      "description": "Perfeccionamiento de lanzamiento (cast), elección de líderes, lectura de eclosiones y presentación de moscas secas, ninfas y streamers."
     },
     {
       "id": "srv-planificacion",
-      "title": "Planificación de jornadas",
-      "description": "Selección estratégica de los mejores tramos, horarios y ambientes según condiciones climáticas, caudales y época de la temporada.",
-      "iconName": "Map",
+      "note": "Diseño previo a cada salida",
+      "title": "Planificación integral de jornadas",
       "enabled": true,
-      "note": "Diseño previo a cada salida"
+      "iconName": "Map",
+      "priceLabel": "Itinerario multirrío a medida",
+      "description": "Selección estratégica de los mejores tramos, horarios y ambientes según condiciones climáticas, caudales y época de la temporada."
     },
     {
       "id": "srv-balsa",
-      "title": "Navegación y logística para salidas en balsa",
-      "description": "Embarcaciones preparadas para fly fishing, coordinación de ingresos y egresos del río, y seguridad náutica en todo el recorrido.",
-      "iconName": "Anchor",
+      "note": "Específico para modalidad en balsa",
+      "title": "Navegación y logística en balsa",
       "enabled": true,
-      "note": "Específico para modalidad en balsa"
+      "iconName": "Anchor",
+      "priceLabel": "Jornada completa de flotada",
+      "description": "Embarcaciones preparadas para fly fishing, coordinación de ingresos y egresos del río, y seguridad náutica en todo el recorrido."
     },
     {
       "id": "srv-nivel",
-      "title": "Experiencias adaptadas al nivel del pescador",
-      "description": "Paciencia pedagógica para quienes dan sus primeros pasos con la caña mosquera y exigencia táctica para pescadores experimentados.",
-      "iconName": "Sliders",
+      "note": "Iniciación, intermedio y avanzado",
+      "title": "Salidas de iniciación y perfeccionamiento",
       "enabled": true,
-      "note": "Iniciación, intermedio y avanzado"
+      "iconName": "Sliders",
+      "priceLabel": "Bautismo mosquero / Perfeccionamiento",
+      "description": "Paciencia pedagógica para quienes dan sus primeros pasos con la caña mosquera y exigencia táctica para pescadores experimentados."
     },
     {
       "id": "srv-equipo",
-      "title": "Equipamiento de pesca",
-      "description": "Posibilidad de coordinar cañas, reels, líneas y selección de moscas patagónicas en caso de requerirlo para la salida.",
-      "iconName": "Briefcase",
+      "note": "Consultar según programa",
+      "title": "Provisión de equipamiento de pesca",
       "enabled": true,
-      "note": "Consultar según programa"
+      "iconName": "Briefcase",
+      "priceLabel": "Adicional o incluido según paquete",
+      "description": "Posibilidad de coordinar cañas, reels, líneas y selección de moscas patagónicas en caso de requerirlo para la salida."
     }
   ],
   "departures": [
     {
       "id": "dep-1",
       "date": "2026-11-12",
-      "destination": "Río Malleo — Sector Medio",
-      "experienceType": "Pesca de vadeo",
-      "serviceGroupType": "Salida para dos personas",
-      "maxParticipants": 2,
-      "availableSpots": 2,
+      "isDemo": false,
       "duration": "Jornada completa",
+      "priceLabel": "Reserva con seña del 30%",
+      "destination": "Río Malleo — Sector Medio",
       "additionalInfo": "Jornada enfocada en pesca con mosca seca y ninfas livianas en aguas bajas y cristalinas.",
-      "isDemo": false
+      "availableSpots": 1,
+      "experienceType": "Pesca de vadeo",
+      "maxParticipants": 2,
+      "serviceGroupType": "Salida para dos personas",
+      "startTime": "08:00",
+      "endTime": "17:30",
+      "status": "activa"
     },
     {
       "id": "dep-2",
       "date": "2026-11-18",
-      "destination": "Río Chimehuín — Flotada Clásica",
-      "experienceType": "Pesca en balsa",
-      "serviceGroupType": "Salida para dos personas",
-      "maxParticipants": 2,
-      "availableSpots": 2,
+      "isDemo": false,
       "duration": "Jornada completa",
+      "priceLabel": "Reserva con seña del 30%",
+      "destination": "Río Chimehuín — Flotada Clásica",
       "additionalInfo": "Recorrido en balsa combinando deriva sobre barrancas y paradas de vadeo en correderas.",
-      "isDemo": false
+      "availableSpots": 2,
+      "experienceType": "Pesca en balsa",
+      "maxParticipants": 2,
+      "serviceGroupType": "Salida para dos personas",
+      "startTime": "08:00",
+      "endTime": "17:30",
+      "status": "activa"
     },
     {
       "id": "dep-3",
       "date": "2026-11-24",
-      "destination": "Río Collón Curá",
-      "experienceType": "Pesca en balsa",
-      "serviceGroupType": "Salida grupal",
-      "maxParticipants": 4,
-      "availableSpots": 4,
+      "isDemo": false,
       "duration": "Jornada completa",
+      "priceLabel": "Reserva con seña del 30%",
+      "destination": "Río Collón Curá",
       "additionalInfo": "Salida coordinada con dos embarcaciones por los brazos e islas del Collón Curá.",
-      "isDemo": false
+      "availableSpots": 4,
+      "experienceType": "Pesca en balsa",
+      "maxParticipants": 4,
+      "serviceGroupType": "Salida grupal",
+      "startTime": "08:00",
+      "endTime": "17:30",
+      "status": "activa"
     },
     {
       "id": "dep-4",
       "date": "2026-12-05",
-      "destination": "Junín de los Andes — Cuenca del Neuquén",
-      "experienceType": "Salida personalizada",
-      "serviceGroupType": "Salida privada o personalizada",
-      "maxParticipants": 2,
-      "availableSpots": 2,
+      "isDemo": false,
       "duration": "Programa a medida",
+      "priceLabel": "Reserva con seña del 30%",
+      "destination": "Junín de los Andes — Cuenca del Neuquén",
       "additionalInfo": "Fecha programada para diseñar una experiencia a medida según nivel y preferencias del pescador.",
-      "isDemo": false
+      "availableSpots": 2,
+      "experienceType": "Salida personalizada",
+      "maxParticipants": 2,
+      "serviceGroupType": "Salida privada o personalizada",
+      "startTime": "08:00",
+      "endTime": "17:30",
+      "status": "activa"
     }
   ],
-  "reviews": [
+  "enrollments": [
     {
-      "id": "rev-1",
-      "authorName": "Santiago Mendizábal",
-      "authorLocation": "Buenos Aires, Argentina",
-      "experienceModality": "Pesca de vadeo · Río Malleo",
-      "rating": 5,
-      "comment": "Vadeamos el Malleo temprano con el Lanín de fondo. La lectura del agua, la paciencia para esperar la subida de las marrones a la mosca seca y la tranquilidad de toda la jornada superaron cualquier expectativa.",
-      "createdAt": "2026-03-18T14:00:00.000Z"
-    },
-    {
-      "id": "rev-2",
-      "authorName": "Hernán & Lucas Pellegrini",
-      "authorLocation": "Rosario, Santa Fe",
-      "experienceModality": "Pesca en balsa · Río Chimehuín",
-      "rating": 5,
-      "comment": "Hicimos nuestra primera flotada padre e hijo en el Chimehuín. La logística impecable, las paradas en las correderas justas y una calidez humana que te hace sentir pescando con amigos de toda la vida.",
-      "createdAt": "2026-02-25T18:30:00.000Z"
-    },
-    {
-      "id": "rev-3",
-      "authorName": "Matías K. Weber",
-      "authorLocation": "Bariloche / Múnich",
-      "experienceModality": "Salida personalizada · Río Collón Curá",
-      "rating": 5,
-      "comment": "Traum hace honor a su nombre.Tres días combinando vadeo técnico y balsa en rincones silenciosos de Junín de los Andes. El respeto por el recurso y el Catch & Release es ejemplar.",
-      "createdAt": "2026-01-14T11:15:00.000Z"
+      "id": "inq-1793812467201",
+      "bookingCode": "TRM-6379",
+      "departureId": "dep-1",
+      "fullName": "Aureliano Soria Carabajal",
+      "whatsapp": "+5492972505908",
+      "normalizedPhone": "2972505908",
+      "email": "aurelianosoriacarabajal@gmail.com",
+      "participantsCount": 1,
+      "comments": "Destino: Río Malleo — Sector Medio",
+      "status": "confirmada",
+      "createdAt": "2026-11-04T17:14:27.201Z"
     }
   ],
-  "inquiries": []
+  "customRequests": [
+    {
+      "id": "inq-1793812565661",
+      "requestCode": "TRM-3082",
+      "desiredDate": "2026-11-05",
+      "preferredSchedule": "Todo el día",
+      "preferredRiver": "",
+      "experienceType": "Pesca de vadeo",
+      "participantsCount": 1,
+      "fullName": "Aureliano Soria Carabajal",
+      "whatsapp": "5492972505908",
+      "normalizedPhone": "2972505908",
+      "email": "aurelianosoriacarabajal@gmail.com",
+      "comments": "malleo",
+      "status": "pendiente",
+      "createdAt": "2026-11-04T17:16:05.661Z"
+    },
+    {
+      "id": "inq-1793803418470",
+      "requestCode": "TRM-5507",
+      "desiredDate": "2026-11-12",
+      "preferredSchedule": "Todo el día",
+      "preferredRiver": "",
+      "experienceType": "Pesca de vadeo",
+      "participantsCount": 2,
+      "fullName": "ruben azpi",
+      "whatsapp": "+5492972505908",
+      "normalizedPhone": "2972505908",
+      "email": "azpilicuetaruben@gmail.com",
+      "comments": "Destino solicitado: Río Malleo — Sector Medio",
+      "status": "aceptada",
+      "createdAt": "2026-11-04T14:43:38.470Z"
+    },
+    {
+      "id": "inq-1793803402804",
+      "requestCode": "TRM-2082",
+      "desiredDate": "2026-11-13",
+      "preferredSchedule": "Todo el día",
+      "preferredRiver": "",
+      "experienceType": "Pesca de vadeo",
+      "participantsCount": 2,
+      "fullName": "ruben azpi",
+      "whatsapp": "+5492972505908",
+      "normalizedPhone": "2972505908",
+      "email": "azpilicuetaruben@gmail.com",
+      "comments": "quiero queque eluen",
+      "status": "aceptada",
+      "createdAt": "2026-11-04T14:43:22.804Z"
+    },
+    {
+      "id": "inq-1793803379042",
+      "requestCode": "TRM-3007",
+      "desiredDate": "2026-11-13",
+      "preferredSchedule": "Todo el día",
+      "preferredRiver": "",
+      "experienceType": "Pesca de vadeo",
+      "participantsCount": 2,
+      "fullName": "ruben azpi",
+      "whatsapp": "+5492972505908",
+      "normalizedPhone": "2972505908",
+      "email": "azpilicuetaruben@gmail.com",
+      "comments": "quiero queque eluen",
+      "status": "aceptada",
+      "createdAt": "2026-11-04T14:42:59.042Z"
+    },
+    {
+      "id": "inq-1793803346786",
+      "requestCode": "TRM-1621",
+      "desiredDate": "2026-11-10",
+      "preferredSchedule": "Todo el día",
+      "preferredRiver": "",
+      "experienceType": "Pesca de vadeo",
+      "participantsCount": 2,
+      "fullName": "ruben azpi",
+      "whatsapp": "+5492972505908",
+      "normalizedPhone": "2972505908",
+      "email": "azpilicuetaruben@gmail.com",
+      "comments": "quiero queque eluen",
+      "status": "aceptada",
+      "createdAt": "2026-11-04T14:42:26.786Z"
+    }
+  ],
+  "blockedDays": [],
+  "waitlistAlerts": [],
+  "reviews": [],
+  "inquiries": [
+    {
+      "id": "inq-1793812565661",
+      "bookingCode": "TRM-3082",
+      "createdAt": "2026-11-04T17:16:05.661Z",
+      "fullName": "Aureliano Soria Carabajal",
+      "email": "aurelianosoriacarabajal@gmail.com",
+      "whatsapp": "5492972505908",
+      "desiredDate": "2026-11-05",
+      "requiresDeposit": false,
+      "spotsReleased": false,
+      "selectedServiceTitle": "Solicitud a pedido (Todo el día)",
+      "experienceType": "Pesca de vadeo",
+      "serviceGroupType": "Salida privada o personalizada",
+      "participantsCount": 1,
+      "skillLevel": "Intermedio",
+      "comments": "malleo",
+      "legalAccepted": true,
+      "legalAcceptedAt": "2026-11-04T17:16:05.661Z",
+      "legalVersion": "v2026.11-AR",
+      "status": "Pendiente",
+      "preferredSchedule": "Todo el día",
+      "preferredRiver": "",
+      "customRequestStatus": "pendiente"
+    },
+    {
+      "id": "inq-1793812467201",
+      "bookingCode": "TRM-6379",
+      "createdAt": "2026-11-04T17:14:27.201Z",
+      "fullName": "Aureliano Soria Carabajal",
+      "email": "aurelianosoriacarabajal@gmail.com",
+      "whatsapp": "+5492972505908",
+      "desiredDate": "2026-11-12",
+      "departureId": "dep-1",
+      "requiresDeposit": false,
+      "spotsReleased": false,
+      "selectedServiceTitle": "Río Malleo — Sector Medio (Pesca de vadeo)",
+      "experienceType": "Pesca de vadeo",
+      "serviceGroupType": "Salida individual",
+      "participantsCount": 1,
+      "skillLevel": "Intermedio",
+      "comments": "Destino: Río Malleo — Sector Medio",
+      "legalAccepted": true,
+      "legalAcceptedAt": "2026-11-04T17:14:27.201Z",
+      "legalVersion": "v2026.11-AR",
+      "status": "Confirmado",
+      "enrollmentStatus": "confirmada"
+    },
+    {
+      "id": "inq-1793803418470",
+      "bookingCode": "TRM-5507",
+      "createdAt": "2026-11-04T14:43:38.470Z",
+      "fullName": "ruben azpi",
+      "email": "azpilicuetaruben@gmail.com",
+      "whatsapp": "+5492972505908",
+      "desiredDate": "2026-11-12",
+      "requiresDeposit": false,
+      "spotsReleased": false,
+      "selectedServiceTitle": "Solicitud a pedido (Todo el día)",
+      "experienceType": "Pesca de vadeo",
+      "serviceGroupType": "Salida privada o personalizada",
+      "participantsCount": 2,
+      "skillLevel": "Intermedio",
+      "comments": "Destino solicitado: Río Malleo — Sector Medio",
+      "legalAccepted": true,
+      "legalAcceptedAt": "2026-11-04T14:43:38.470Z",
+      "legalVersion": "v2026.11-AR",
+      "status": "Confirmado",
+      "preferredSchedule": "Todo el día",
+      "preferredRiver": "",
+      "customRequestStatus": "aceptada"
+    },
+    {
+      "id": "inq-1793803402804",
+      "bookingCode": "TRM-2082",
+      "createdAt": "2026-11-04T14:43:22.804Z",
+      "fullName": "ruben azpi",
+      "email": "azpilicuetaruben@gmail.com",
+      "whatsapp": "+5492972505908",
+      "desiredDate": "2026-11-13",
+      "requiresDeposit": false,
+      "spotsReleased": false,
+      "selectedServiceTitle": "Solicitud a pedido (Todo el día)",
+      "experienceType": "Pesca de vadeo",
+      "serviceGroupType": "Salida privada o personalizada",
+      "participantsCount": 2,
+      "skillLevel": "Intermedio",
+      "comments": "quiero queque eluen",
+      "legalAccepted": true,
+      "legalAcceptedAt": "2026-11-04T14:43:22.804Z",
+      "legalVersion": "v2026.11-AR",
+      "status": "Confirmado",
+      "preferredSchedule": "Todo el día",
+      "preferredRiver": "",
+      "customRequestStatus": "aceptada"
+    },
+    {
+      "id": "inq-1793803379042",
+      "bookingCode": "TRM-3007",
+      "createdAt": "2026-11-04T14:42:59.042Z",
+      "fullName": "ruben azpi",
+      "email": "azpilicuetaruben@gmail.com",
+      "whatsapp": "+5492972505908",
+      "desiredDate": "2026-11-13",
+      "requiresDeposit": false,
+      "spotsReleased": false,
+      "selectedServiceTitle": "Solicitud a pedido (Todo el día)",
+      "experienceType": "Pesca de vadeo",
+      "serviceGroupType": "Salida privada o personalizada",
+      "participantsCount": 2,
+      "skillLevel": "Intermedio",
+      "comments": "quiero queque eluen",
+      "legalAccepted": true,
+      "legalAcceptedAt": "2026-11-04T14:42:59.042Z",
+      "legalVersion": "v2026.11-AR",
+      "status": "Confirmado",
+      "preferredSchedule": "Todo el día",
+      "preferredRiver": "",
+      "customRequestStatus": "aceptada"
+    },
+    {
+      "id": "inq-1793803346786",
+      "bookingCode": "TRM-1621",
+      "createdAt": "2026-11-04T14:42:26.786Z",
+      "fullName": "ruben azpi",
+      "email": "azpilicuetaruben@gmail.com",
+      "whatsapp": "+5492972505908",
+      "desiredDate": "2026-11-10",
+      "requiresDeposit": false,
+      "spotsReleased": false,
+      "selectedServiceTitle": "Solicitud a pedido (Todo el día)",
+      "experienceType": "Pesca de vadeo",
+      "serviceGroupType": "Salida privada o personalizada",
+      "participantsCount": 2,
+      "skillLevel": "Intermedio",
+      "comments": "quiero queque eluen",
+      "legalAccepted": true,
+      "legalAcceptedAt": "2026-11-04T14:42:26.786Z",
+      "legalVersion": "v2026.11-AR",
+      "status": "Confirmado",
+      "preferredSchedule": "Todo el día",
+      "preferredRiver": "",
+      "customRequestStatus": "aceptada"
+    }
+  ],
+  "cookieConsents": [
+    {
+      "id": "cc-v-1793887815490-7jjwi77",
+      "visitorId": "v-1793887815490-7jjwi77",
+      "decision": "accepted",
+      "preferences": {
+        "payments": true,
+        "analytics": true,
+        "essential": true,
+        "googleAuth": true
+      },
+      "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/155.0.0.0 Safari/537.36",
+      "createdAt": "Thu Nov 05 2026 11:10:16 GMT-0300 (hora estándar de Argentina)",
+      "updatedAt": "Thu Nov 05 2026 11:10:16 GMT-0300 (hora estándar de Argentina)"
+    },
+    {
+      "id": "cc-v-1793813552129-6trua2q",
+      "visitorId": "v-1793813552129-6trua2q",
+      "decision": "accepted",
+      "preferences": {
+        "payments": true,
+        "analytics": true,
+        "essential": true,
+        "googleAuth": true
+      },
+      "userAgent": "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/156.0.0.0 Mobile Safari/537.36",
+      "createdAt": "Wed Nov 04 2026 14:32:33 GMT-0300 (hora estándar de Argentina)",
+      "updatedAt": "Wed Nov 04 2026 14:32:33 GMT-0300 (hora estándar de Argentina)"
+    },
+    {
+      "id": "cc-v-1793812254116-ab1jjgf",
+      "visitorId": "v-1793812254116-ab1jjgf",
+      "decision": "accepted",
+      "preferences": {
+        "payments": true,
+        "analytics": true,
+        "essential": true,
+        "googleAuth": true
+      },
+      "userAgent": "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/156.0.0.0 Mobile Safari/537.36",
+      "createdAt": "Wed Nov 04 2026 14:10:55 GMT-0300 (hora estándar de Argentina)",
+      "updatedAt": "Wed Nov 04 2026 14:10:55 GMT-0300 (hora estándar de Argentina)"
+    },
+    {
+      "id": "cc-v-1793812217914-kb94y96",
+      "visitorId": "v-1793812217914-kb94y96",
+      "decision": "accepted",
+      "preferences": {
+        "payments": true,
+        "analytics": true,
+        "essential": true,
+        "googleAuth": true
+      },
+      "userAgent": "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/156.0.0.0 Mobile Safari/537.36",
+      "createdAt": "Wed Nov 04 2026 14:10:19 GMT-0300 (hora estándar de Argentina)",
+      "updatedAt": "Wed Nov 04 2026 14:10:19 GMT-0300 (hora estándar de Argentina)"
+    },
+    {
+      "id": "cc-v-1793806872450-ikb2uq5",
+      "visitorId": "v-1793806872450-ikb2uq5",
+      "decision": "accepted",
+      "preferences": {
+        "payments": true,
+        "analytics": true,
+        "essential": true,
+        "googleAuth": true
+      },
+      "userAgent": "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/156.0.0.0 Mobile Safari/537.36",
+      "createdAt": "Wed Nov 04 2026 12:41:12 GMT-0300 (hora estándar de Argentina)",
+      "updatedAt": "Wed Nov 04 2026 12:41:12 GMT-0300 (hora estándar de Argentina)"
+    },
+    {
+      "id": "cc-v-1793803133792-7ttpspa",
+      "visitorId": "v-1793803133792-7ttpspa",
+      "decision": "accepted",
+      "preferences": {
+        "payments": true,
+        "analytics": true,
+        "essential": true,
+        "googleAuth": true
+      },
+      "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Antigravity/2.29.0 Chrome/152.0.7977.130 Electron/44.5.1 Safari/537.36",
+      "createdAt": "Wed Nov 04 2026 11:38:55 GMT-0300 (hora estándar de Argentina)",
+      "updatedAt": "Wed Nov 04 2026 11:38:55 GMT-0300 (hora estándar de Argentina)"
+    },
+    {
+      "id": "cc-visitor_live_verification",
+      "visitorId": "visitor_live_verification",
+      "decision": "accepted",
+      "preferences": {
+        "payments": true,
+        "analytics": true,
+        "essential": true,
+        "googleAuth": true
+      },
+      "userAgent": "node",
+      "createdAt": "Wed Nov 04 2026 11:35:28 GMT-0300 (hora estándar de Argentina)",
+      "updatedAt": "Wed Nov 04 2026 11:35:28 GMT-0300 (hora estándar de Argentina)"
+    }
+  ],
+  "regretRequests": []
 }

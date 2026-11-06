@@ -108,97 +108,74 @@ export default function ServicesSection({
           ))}
         </div>
 
-        {/* MEDIOS DE PAGO Y POLÍTICA DE SEÑA (SIN EXPONER DATOS BANCARIOS PÚBLICAMENTE) */}
-        {paymentConfig?.enabled && (
-          <div className="mt-16 bg-[#263D32] text-[#F2EFE6] border border-[#65745A]/50 shadow-2xl overflow-hidden">
-            <div className="p-8 sm:p-10 lg:p-12 grid grid-cols-1 lg:grid-cols-12 gap-10 items-center">
-              {/* Left Column: Accepted Payment Methods & Deposit Rule (7 cols) */}
-              <div className="lg:col-span-7 space-y-6">
-                <div>
-                  <h3 className="font-editorial text-3xl sm:text-4xl text-[#F2EFE6] mb-2">
-                    {paymentConfig.title}
-                  </h3>
-                  <p className="text-sm text-[#D8CEB9]/90 font-light">
-                    {paymentConfig.subtitle}
+        {/* MODALIDADES DEL CALENDARIO: SALIDAS PROGRAMADAS Y SALIDAS A PEDIDO */}
+        <div className="mt-16 bg-[#263D32] text-[#F2EFE6] border border-[#65745A]/50 shadow-2xl overflow-hidden">
+          <div className="p-8 sm:p-10 lg:p-12 grid grid-cols-1 lg:grid-cols-12 gap-10 items-center">
+            <div className="lg:col-span-7 space-y-6">
+              <div>
+                <h3 className="font-editorial text-3xl sm:text-4xl text-[#F2EFE6] mb-2">
+                  Dos formas de salir al río con TRAUM
+                </h3>
+                <p className="text-sm text-[#D8CEB9]/90 font-light">
+                  Un calendario único pensado para que te sumes a una jornada
+                  programada o propongas tu propia fecha a medida.
+                </p>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
+                <div className="p-4 bg-[#292D29]/50 border border-[#899487]/25 space-y-2">
+                  <div className="flex items-center gap-2 text-[#D8CEB9] font-semibold text-xs uppercase tracking-wider">
+                    <CheckCircle2 className="w-4 h-4 flex-shrink-0" />
+                    <span>A) Salidas Programadas</span>
+                  </div>
+                  <p className="text-xs text-[#F2EFE6]/85 font-light leading-relaxed">
+                    El guía publica fecha, horario, río, tipo de pesca y cupos.
+                    Te anotás directo y si el cupo se llena podés sumarte a la
+                    lista de espera.
                   </p>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 pt-2">
-                  {paymentConfig.acceptedMethods.map((method, idx) => (
-                    <div
-                      key={idx}
-                      className="p-3.5 bg-[#292D29]/50 border border-[#899487]/25 flex items-center gap-3 text-xs sm:text-sm text-[#F2EFE6]/90"
-                    >
-                      <CheckCircle2 className="w-4 h-4 text-[#D8CEB9] flex-shrink-0" />
-                      <span>{method}</span>
-                    </div>
-                  ))}
-                </div>
-
-                <p className="text-xs text-[#F2EFE6]/75 font-light leading-relaxed border-l-2 border-[#D8CEB9]/50 pl-4">
-                  <strong>Importante:</strong> Las salidas ya programadas en el
-                  calendario requieren una seña del{" "}
-                  <strong>{paymentConfig.depositPercentage}%</strong> para
-                  descontar y asegurar tu cupo. En cambio, si solicitás un{" "}
-                  <strong>día libre a medida</strong>, no debés abonar seña al
-                  enviar la consulta hasta que confirmemos disponibilidad para
-                  esa fecha.
-                </p>
-              </div>
-
-              {/* Right Column: Protected Payment Protocol Notice (5 cols) */}
-              <div className="lg:col-span-5 bg-[#292D29]/70 border border-[#899487]/35 p-6 sm:p-8 space-y-5">
-                <div className="flex items-center justify-between pb-3 border-b border-[#899487]/25">
-                  <div className="flex items-center gap-2.5">
-                    <Lock className="w-4 h-4 text-[#D8CEB9]" />
-                    <span className="text-xs uppercase tracking-[0.2em] text-[#D8CEB9] font-semibold">
-                      Protocolo de Pago Protegido
-                    </span>
+                <div className="p-4 bg-[#292D29]/50 border border-[#899487]/25 space-y-2">
+                  <div className="flex items-center gap-2 text-[#D8CEB9] font-semibold text-xs uppercase tracking-wider">
+                    <CheckCircle2 className="w-4 h-4 flex-shrink-0" />
+                    <span>B) Salidas a Pedido</span>
                   </div>
-                  <ShieldCheck className="w-4 h-4 text-[#899487]" />
-                </div>
-
-                <p className="text-xs sm:text-sm text-[#F2EFE6]/85 font-light leading-relaxed">
-                  Por seguridad comercial, los datos bancarios del titular
-                  (Alias y Banco) no se muestran de forma abierta en la página:
-                </p>
-
-                <ol className="space-y-2.5 text-xs text-[#D8CEB9]/90">
-                  <li className="flex items-start gap-2.5">
-                    <span className="px-2 py-0.5 bg-[#263D32] border border-[#D8CEB9]/30 text-[10px] font-semibold">
-                      01
-                    </span>
-                    <span>
-                      Si elegís una <strong>salida precargada</strong> del
-                      calendario, al inscribirte se descuentan tus cupos y se
-                      habilitan los datos para abonar el{" "}
-                      <strong>{paymentConfig.depositPercentage}% de seña</strong>.
-                    </span>
-                  </li>
-                  <li className="flex items-start gap-2.5">
-                    <span className="px-2 py-0.5 bg-[#263D32] border border-[#D8CEB9]/30 text-[10px] font-semibold">
-                      02
-                    </span>
-                    <span>
-                      Si pedís un <strong>día libre a medida</strong>, tu
-                      solicitud se envía directo por mail sin pago previo de
-                      seña.
-                    </span>
-                  </li>
-                </ol>
-
-                <div className="pt-2">
-                  <a
-                    href="#calendario"
-                    className="w-full py-3.5 px-4 bg-[#D8CEB9] hover:bg-[#F2EFE6] text-[#263D32] text-xs uppercase tracking-[0.2em] font-semibold transition-colors flex items-center justify-center cursor-pointer"
-                  >
-                    Ver calendario de salidas y cupos
-                  </a>
+                  <p className="text-xs text-[#F2EFE6]/85 font-light leading-relaxed">
+                    En cualquier fecha libre del calendario podés solicitar una
+                    salida personalizada. El guía la revisa y lo coordinan
+                    directamente entre ustedes, sin señas ni pagos en la web.
+                  </p>
                 </div>
               </div>
             </div>
+
+            <div className="lg:col-span-5 bg-[#292D29]/70 border border-[#899487]/35 p-6 sm:p-8 space-y-5">
+              <div className="flex items-center justify-between pb-3 border-b border-[#899487]/25">
+                <div className="flex items-center gap-2.5">
+                  <ShieldCheck className="w-4 h-4 text-[#D8CEB9]" />
+                  <span className="text-xs uppercase tracking-[0.2em] text-[#D8CEB9] font-semibold">
+                    Trato Directo con el Guía
+                  </span>
+                </div>
+              </div>
+
+              <p className="text-xs sm:text-sm text-[#F2EFE6]/85 font-light leading-relaxed">
+                Sin cuentas obligatorias ni pasarelas intermedias: dejás tu
+                nombre, teléfono/WhatsApp y correo electrónico para recibir la
+                confirmación de tu anotación o coordinar tu salida personalizada.
+              </p>
+
+              <div className="pt-2">
+                <a
+                  href="#calendario"
+                  className="w-full py-3.5 px-4 bg-[#D8CEB9] hover:bg-[#F2EFE6] text-[#263D32] text-xs uppercase tracking-[0.2em] font-semibold transition-colors flex items-center justify-center cursor-pointer"
+                >
+                  Ver calendario de salidas y cupos
+                </a>
+              </div>
+            </div>
           </div>
-        )}
+        </div>
       </div>
     </section>
   );

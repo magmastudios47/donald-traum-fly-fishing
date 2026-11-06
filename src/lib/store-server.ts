@@ -2,7 +2,16 @@ import { promises as fs } from "fs";
 import path from "path";
 import { neon } from "@neondatabase/serverless";
 import { initialTraumData } from "@/data/initial-traum-data";
-import { CookieConsentRecord, TraumStoreData } from "@/types/traum";
+import {
+  BlockedDay,
+  BookingInquiry,
+  CalendarDeparture,
+  CookieConsentRecord,
+  CustomTripRequest,
+  DepartureEnrollment,
+  TraumStoreData,
+  WaitlistPromotionAlert,
+} from "@/types/traum";
 
 const DATA_FILE_PATH = path.join(process.cwd(), "src", "data", "traum-store.json");
 
@@ -11,13 +20,244 @@ const NEON_DATABASE_URL =
   process.env.POSTGRES_URL ||
   "postgresql://neondb_owner:npg_xOZdjbAt5Mi3@ep-small-breeze-b61vzz3d-pooler.c-2.sa-east-1.aws.neon.tech/neondb?sslmode=require";
 
-function normalizeStore(parsed: Partial<TraumStoreData>, version?: number, updatedAt?: string): TraumStoreData {
+/**
+ * Obtiene la fecha actual en zona horaria Argentina (UTC-3) en formato YYYY-MM-DD.
+ */
+export function getArgentinaTodayStr(): string {
+  try {
+    return new Intl.DateTimeFormat("en-CA", {
+      timeZone: "America/Argentina/Buenos_Aires",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).format(new Date());
+  } catch {
+    const now = new Date(Date.now() - 3 * 60 * 60 * 1000);
+    return now.toISOString().split("T")[0];
+  }
+}
+
+/**
+ * Normaliza un número de teléfono dejando únicamente los dígitos significativos
+ * (últimos 10 dígitos si supera esa longitud por prefijos +54 9, o todos los dígitos).
+ */
+export function normalizePhoneForComparison(phone: string): string {
+  const digits = String(phone || "").replace(/\D/g, "");
+  if (digits.length > 10) {
+    return digits.slice(-10);
+  }
+  return digits;
+}
+
+/**
+ * Recalcula cupos_disponibles = cupos_totales - sum(cantidad_personas en anotaciones confirmadas)
+ * para todas las salidas programadas y sincroniza inquiries legadas si existen.
+ */
+export function recalculateStoreConsistentState(
+  store: TraumStoreData
+): TraumStoreData {
+  const rawDepartures: CalendarDeparture[] = (
+    store.departures || initialTraumData.departures
+  ).map((dep) => ({
+    ...dep,
+    startTime: dep.startTime || "08:00",
+    endTime: dep.endTime || "17:30",
+    status: dep.status === "cancelada" ? "cancelada" : "activa",
+    maxParticipants: Math.max(1, Number(dep.maxParticipants) || 2),
+    availableSpots: Math.max(0, Number(dep.availableSpots ?? dep.maxParticipants) || 0),
+  }));
+
+  // Migrar cualquier inquiry previa que no esté en enrollments o customRequests
+  const existingEnrollments: DepartureEnrollment[] = [...(store.enrollments || [])];
+  const existingRequests: CustomTripRequest[] = [...(store.customRequests || [])];
+
+  const enrollmentIds = new Set(existingEnrollments.map((e) => e.id));
+  const requestIds = new Set(existingRequests.map((r) => r.id));
+
+  for (const inq of store.inquiries || []) {
+    if (inq.departureId) {
+      if (!enrollmentIds.has(inq.id)) {
+        const mappedStatus =
+          inq.enrollmentStatus ||
+          (inq.status === "Cancelado" || inq.spotsReleased
+            ? "cancelada"
+            : "confirmada");
+        existingEnrollments.push({
+          id: inq.id,
+          bookingCode: inq.bookingCode || `TRM-${inq.id.slice(-4)}`,
+          departureId: inq.departureId,
+          fullName: inq.fullName,
+          whatsapp: inq.whatsapp,
+          normalizedPhone: normalizePhoneForComparison(inq.whatsapp),
+          email: inq.email,
+          participantsCount: Math.max(1, Number(inq.participantsCount) || 1),
+          comments: inq.comments || "",
+          status: mappedStatus,
+          createdAt: inq.createdAt,
+        });
+        enrollmentIds.add(inq.id);
+      }
+    } else if (inq.desiredDate && inq.desiredDate !== "A definir") {
+      if (!requestIds.has(inq.id)) {
+        const mappedReqStatus =
+          inq.customRequestStatus ||
+          (inq.status === "Confirmado"
+            ? "aceptada"
+            : inq.status === "Cancelado"
+            ? "rechazada"
+            : "pendiente");
+        existingRequests.push({
+          id: inq.id,
+          requestCode: inq.bookingCode || `SOL-${inq.id.slice(-4)}`,
+          desiredDate: inq.desiredDate,
+          preferredSchedule: inq.preferredSchedule || "Todo el día",
+          preferredRiver: inq.preferredRiver || "",
+          experienceType:
+            (inq.experienceType as CustomTripRequest["experienceType"]) || "",
+          participantsCount: Math.max(1, Number(inq.participantsCount) || 1),
+          fullName: inq.fullName,
+          whatsapp: inq.whatsapp,
+          normalizedPhone: normalizePhoneForComparison(inq.whatsapp),
+          email: inq.email,
+          comments: inq.comments || "",
+          status: mappedReqStatus,
+          alternativeDate: inq.alternativeDate,
+          guideResponse: inq.guideResponse,
+          createdAt: inq.createdAt,
+        });
+        requestIds.add(inq.id);
+      }
+    }
+  }
+
+  // Asegurar normalizedPhone en todas las anotaciones
+  const normalizedEnrollments: DepartureEnrollment[] = existingEnrollments.map(
+    (enr) => ({
+      ...enr,
+      normalizedPhone:
+        enr.normalizedPhone || normalizePhoneForComparison(enr.whatsapp),
+      participantsCount: Math.max(1, Number(enr.participantsCount) || 1),
+    })
+  );
+
+  // Recalcular exactamente: cupos_disponibles = cupos_totales - personas en anotaciones confirmadas
+  const recalculatedDepartures = rawDepartures.map((dep) => {
+    const confirmedPeople = normalizedEnrollments
+      .filter(
+        (enr) => enr.departureId === dep.id && enr.status === "confirmada"
+      )
+      .reduce((acc, enr) => acc + (Number(enr.participantsCount) || 1), 0);
+
+    const availableSpots =
+      dep.status === "cancelada"
+        ? 0
+        : Math.max(0, dep.maxParticipants - confirmedPeople);
+
+    return {
+      ...dep,
+      availableSpots,
+    };
+  });
+
+  // Sincronizar inquiries para mantener compatibilidad con vistas existentes
+  const syncedInquiries: BookingInquiry[] = [
+    ...normalizedEnrollments.map((enr): BookingInquiry => {
+      const dep = recalculatedDepartures.find((d) => d.id === enr.departureId);
+      return {
+        id: enr.id,
+        bookingCode: enr.bookingCode,
+        createdAt: enr.createdAt,
+        fullName: enr.fullName,
+        email: enr.email,
+        whatsapp: enr.whatsapp,
+        desiredDate: dep?.date || "Salida programada",
+        departureId: enr.departureId,
+        requiresDeposit: false,
+        spotsReleased: enr.status !== "confirmada",
+        selectedServiceTitle: dep
+          ? `${dep.destination} (${dep.experienceType})`
+          : "Salida programada",
+        experienceType: dep?.experienceType || "Pesca en balsa",
+        serviceGroupType:
+          enr.participantsCount === 1
+            ? "Salida individual"
+            : enr.participantsCount === 2
+            ? "Salida para dos personas"
+            : "Salida grupal",
+        participantsCount: enr.participantsCount,
+        skillLevel: "Intermedio",
+        comments: enr.comments,
+        legalAccepted: true,
+        legalAcceptedAt: enr.createdAt,
+        legalVersion: "v2026.11-AR",
+        status:
+          enr.status === "confirmada"
+            ? "Confirmado"
+            : enr.status === "cancelada"
+            ? "Cancelado"
+            : "Pendiente",
+        enrollmentStatus: enr.status,
+      };
+    }),
+    ...existingRequests.map((req): BookingInquiry => ({
+      id: req.id,
+      bookingCode: req.requestCode,
+      createdAt: req.createdAt,
+      fullName: req.fullName,
+      email: req.email,
+      whatsapp: req.whatsapp,
+      desiredDate: req.desiredDate,
+      requiresDeposit: false,
+      spotsReleased: false,
+      selectedServiceTitle: `Solicitud a pedido (${req.preferredSchedule})`,
+      experienceType: req.experienceType || "Salida personalizada",
+      serviceGroupType: "Salida privada o personalizada",
+      participantsCount: req.participantsCount,
+      skillLevel: "Intermedio",
+      comments: req.comments,
+      legalAccepted: true,
+      legalAcceptedAt: req.createdAt,
+      legalVersion: "v2026.11-AR",
+      status:
+        req.status === "aceptada"
+          ? "Confirmado"
+          : req.status === "rechazada"
+          ? "Cancelado"
+          : req.status === "reprogramada"
+          ? "Contactado"
+          : "Pendiente",
+      preferredSchedule: req.preferredSchedule,
+      preferredRiver: req.preferredRiver,
+      customRequestStatus: req.status,
+      alternativeDate: req.alternativeDate,
+      guideResponse: req.guideResponse,
+    })),
+  ].sort(
+    (a, b) =>
+      new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+  );
+
+  return {
+    ...store,
+    departures: recalculatedDepartures,
+    enrollments: normalizedEnrollments,
+    customRequests: existingRequests,
+    blockedDays: (store.blockedDays || []) as BlockedDay[],
+    waitlistAlerts: (store.waitlistAlerts || []) as WaitlistPromotionAlert[],
+    inquiries: syncedInquiries,
+  };
+}
+
+function normalizeStore(
+  parsed: Partial<TraumStoreData>,
+  version?: number,
+  updatedAt?: string
+): TraumStoreData {
   const mergedSettings = {
     ...initialTraumData.settings,
     ...(parsed.settings || {}),
   };
 
-  // Ensure official email is traumflyfishing9@gmail.com if old placeholder is still present
   if (
     !mergedSettings.email ||
     mergedSettings.email === "contacto@traumflycast.com"
@@ -34,7 +274,6 @@ function normalizeStore(parsed: Partial<TraumStoreData>, version?: number, updat
   const normalizedDestinations = (
     parsed.destinations || initialTraumData.destinations
   ).map((dest) => {
-    // Fix Río Malleo pin location if still on the old -39.7765 coordinate
     if (dest.id === "dest-malleo" && Math.abs(dest.lat - -39.7765) < 0.01) {
       return {
         ...dest,
@@ -48,7 +287,7 @@ function normalizeStore(parsed: Partial<TraumStoreData>, version?: number, updat
     return dest;
   });
 
-  return {
+  const base: TraumStoreData = {
     ...initialTraumData,
     ...parsed,
     version: version ?? parsed.version ?? initialTraumData.version ?? 1,
@@ -63,11 +302,18 @@ function normalizeStore(parsed: Partial<TraumStoreData>, version?: number, updat
       ...initialTraumData.paymentConfig,
       ...(parsed.paymentConfig || {}),
     },
+    departures: parsed.departures || initialTraumData.departures,
+    enrollments: parsed.enrollments || [],
+    customRequests: parsed.customRequests || [],
+    blockedDays: parsed.blockedDays || [],
+    waitlistAlerts: parsed.waitlistAlerts || [],
     reviews: parsed.reviews || initialTraumData.reviews,
     inquiries: parsed.inquiries || [],
     cookieConsents: parsed.cookieConsents || [],
     regretRequests: parsed.regretRequests || [],
   };
+
+  return recalculateStoreConsistentState(base);
 }
 
 async function ensureTables() {
@@ -95,8 +341,93 @@ async function ensureTables() {
   return sql;
 }
 
+// Mutex local en memoria para serializar transacciones concurrentes en el mismo proceso
+let transactionMutex: Promise<unknown> = Promise.resolve();
+
+/**
+ * Ejecuta una lectura-modificación-escritura dentro de una transacción serializada
+ * con control de concurrencia optimista (WHERE version = $expected) en PostgreSQL
+ * para evitar condiciones de carrera al verificar cupos disponibles.
+ */
+export async function runStoreTransaction<T>(
+  mutator: (currentStore: TraumStoreData) => Promise<{
+    nextStore: TraumStoreData;
+    result: T;
+  }>
+): Promise<{ store: TraumStoreData; result: T }> {
+  const runLocked = async (): Promise<{ store: TraumStoreData; result: T }> => {
+    const MAX_RETRIES = 5;
+    for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
+      const current = await getTraumStore();
+      const expectedVersion = Number(current.version) || 1;
+
+      const { nextStore, result } = await mutator(current);
+      const nextVersion = expectedVersion + 1;
+      const nowIso = new Date().toISOString();
+      const normalized = normalizeStore(nextStore, nextVersion, nowIso);
+
+      if (NEON_DATABASE_URL) {
+        try {
+          const sql = await ensureTables();
+          const updatedRows = await sql.query(
+            `UPDATE traum_site_store
+             SET content = $1::jsonb,
+                 version = $2,
+                 updated_at = now()
+             WHERE id = 1 AND version = $3
+             RETURNING version`,
+            [JSON.stringify(normalized), nextVersion, expectedVersion]
+          );
+
+          if (!updatedRows || updatedRows.length === 0) {
+            // Verificar si la fila existe; si no existe, insertarla
+            const checkRows = await sql.query(
+              "SELECT version FROM traum_site_store WHERE id = 1"
+            );
+            if (!checkRows || checkRows.length === 0) {
+              await sql.query(
+                `INSERT INTO traum_site_store (id, content, version, updated_at)
+                 VALUES (1, $1::jsonb, $2, now())
+                 ON CONFLICT (id) DO NOTHING`,
+                [JSON.stringify(normalized), nextVersion]
+              );
+            } else if (attempt < MAX_RETRIES - 1) {
+              // Conflicto de concurrencia detectado: reintentar con el estado fresco
+              continue;
+            }
+          }
+        } catch (dbErr) {
+          console.error("Error in DB transaction:", dbErr);
+        }
+      }
+
+      // Espejar en archivo JSON local
+      try {
+        await fs.mkdir(path.dirname(DATA_FILE_PATH), { recursive: true });
+        await fs.writeFile(
+          DATA_FILE_PATH,
+          JSON.stringify(normalized, null, 2),
+          "utf-8"
+        );
+      } catch {
+        // Ignorar en entornos serverless de solo lectura
+      }
+
+      return { store: normalized, result };
+    }
+
+    throw new Error(
+      "No se pudo completar la transacción por alta concurrencia. Intentá nuevamente."
+    );
+  };
+
+  const nextTask = transactionMutex.then(runLocked, runLocked);
+  transactionMutex = nextTask.catch(() => {});
+  return nextTask;
+}
+
 export async function getTraumStore(): Promise<TraumStoreData> {
-  // 1. Primary: Neon PostgreSQL Cloud Database (shared across all visitors in real time)
+  // 1. Primary: Neon PostgreSQL Cloud Database
   if (NEON_DATABASE_URL) {
     try {
       const sql = await ensureTables();
@@ -106,9 +437,10 @@ export async function getTraumStore(): Promise<TraumStoreData> {
 
       if (rows && rows.length > 0 && rows[0].content) {
         const raw = rows[0].content;
-        const parsed = (typeof raw === "string" ? JSON.parse(raw) : raw) as Partial<TraumStoreData>;
+        const parsed = (
+          typeof raw === "string" ? JSON.parse(raw) : raw
+        ) as Partial<TraumStoreData>;
         if (parsed && Object.keys(parsed).length > 0) {
-          // Also fetch latest 100 cookie consents from dedicated table
           let dbConsents: CookieConsentRecord[] = parsed.cookieConsents || [];
           try {
             const cRows = await sql.query(
@@ -118,7 +450,9 @@ export async function getTraumStore(): Promise<TraumStoreData> {
               dbConsents = cRows.map((r: Record<string, unknown>) => ({
                 id: String(r.id),
                 visitorId: String(r.visitor_id),
-                decision: (r.decision as "accepted" | "rejected" | "custom") || "accepted",
+                decision:
+                  (r.decision as "accepted" | "rejected" | "custom") ||
+                  "accepted",
                 preferences:
                   typeof r.preferences === "string"
                     ? JSON.parse(r.preferences)
@@ -142,7 +476,11 @@ export async function getTraumStore(): Promise<TraumStoreData> {
       }
 
       // Initialize Neon table if empty
-      const initialNormalized = normalizeStore(initialTraumData, 1, new Date().toISOString());
+      const initialNormalized = normalizeStore(
+        initialTraumData,
+        1,
+        new Date().toISOString()
+      );
       await sql.query(
         `INSERT INTO traum_site_store (id, content, version, updated_at)
          VALUES (1, $1::jsonb, 1, now())
@@ -172,7 +510,6 @@ export async function saveTraumStore(
   const nowIso = new Date().toISOString();
   const normalized = normalizeStore(data, nextVersion, nowIso);
 
-  // 1. Save permanently in Neon PostgreSQL
   if (NEON_DATABASE_URL) {
     try {
       const sql = await ensureTables();
@@ -190,10 +527,13 @@ export async function saveTraumStore(
     }
   }
 
-  // 2. Also mirror to local JSON file when writable (dev/local)
   try {
     await fs.mkdir(path.dirname(DATA_FILE_PATH), { recursive: true });
-    await fs.writeFile(DATA_FILE_PATH, JSON.stringify(normalized, null, 2), "utf-8");
+    await fs.writeFile(
+      DATA_FILE_PATH,
+      JSON.stringify(normalized, null, 2),
+      "utf-8"
+    );
   } catch {
     // Ignore read-only filesystem on serverless
   }

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import {
   TraumStoreData,
   CalendarDeparture,
@@ -8,6 +8,7 @@ import {
   ExperienceModality,
   ServiceGroupType,
   SiteImagesConfig,
+  CustomRequestStatus,
 } from "@/types/traum";
 import {
   Calendar,
@@ -26,8 +27,41 @@ import {
   CreditCard,
   Upload,
   Star,
+  Copy,
+  Ban,
+  Download,
+  UserPlus,
+  BellRing,
+  ChevronLeft,
+  ChevronRight,
+  ExternalLink,
+  Check,
+  XCircle,
+  Edit3,
 } from "lucide-react";
 import Link from "next/link";
+
+const ADMIN_MONTH_NAMES = [
+  "Enero",
+  "Febrero",
+  "Marzo",
+  "Abril",
+  "Mayo",
+  "Junio",
+  "Julio",
+  "Agosto",
+  "Septiembre",
+  "Octubre",
+  "Noviembre",
+  "Diciembre",
+];
+const ADMIN_WEEKDAYS = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"];
+
+function buildWaUrl(phone: string, text: string): string {
+  const digits = String(phone || "").replace(/\D/g, "");
+  const formatted = digits.startsWith("54") ? digits : `549${digits}`;
+  return `https://wa.me/${formatted}?text=${encodeURIComponent(text)}`;
+}
 
 function ImageInputControl({
   label,
@@ -142,15 +176,52 @@ export default function AdminDashboardPage() {
 
   // New Departure Form State
   const [newDepDate, setNewDepDate] = useState("2026-11-28");
+  const [newDepStartTime, setNewDepStartTime] = useState("08:00");
+  const [newDepEndTime, setNewDepEndTime] = useState("17:30");
   const [newDepDestination, setNewDepDestination] = useState("Río Malleo");
   const [newDepExperience, setNewDepExperience] =
     useState<ExperienceModality>("Pesca de vadeo");
   const [newDepServiceGroup, setNewDepServiceGroup] =
     useState<ServiceGroupType>("Salida para dos personas");
   const [newDepMax, setNewDepMax] = useState(2);
-  const [newDepSpots, setNewDepSpots] = useState(2);
-  const [newDepDuration, setNewDepDuration] = useState("Jornada completa");
   const [newDepInfo, setNewDepInfo] = useState("");
+  const [newDepRepeatMode, setNewDepRepeatMode] = useState<
+    "none" | "daily" | "weekly"
+  >("none");
+  const [newDepRepeatCount, setNewDepRepeatCount] = useState(2);
+
+  // Edit Departure State
+  const [editingDepId, setEditingDepId] = useState<string | null>(null);
+  const [editDepDate, setEditDepDate] = useState("");
+  const [editDepStartTime, setEditDepStartTime] = useState("08:00");
+  const [editDepEndTime, setEditDepEndTime] = useState("17:30");
+  const [editDepDestination, setEditDepDestination] = useState("");
+  const [editDepExperience, setEditDepExperience] =
+    useState<ExperienceModality>("Pesca en balsa");
+  const [editDepMax, setEditDepMax] = useState(2);
+  const [editDepInfo, setEditDepInfo] = useState("");
+
+  // Manual Enrollment Form State per departure
+  const [manualEnrollDepId, setManualEnrollDepId] = useState<string | null>(
+    null
+  );
+  const [manualName, setManualName] = useState("");
+  const [manualPhone, setManualPhone] = useState("");
+  const [manualEmail, setManualEmail] = useState("");
+  const [manualCount, setManualCount] = useState(1);
+
+  // Blocked Day Form State
+  const [blockDateInput, setBlockDateInput] = useState("2026-11-20");
+  const [blockReasonInput, setBlockReasonInput] = useState("");
+
+  // Admin Calendar Month/Year State
+  const [adminCalMonth, setAdminCalMonth] = useState(10); // Noviembre
+  const [adminCalYear, setAdminCalYear] = useState(2026);
+
+  // Custom Request Response Drafts
+  const [reqResponseDrafts, setReqResponseDrafts] = useState<
+    Record<string, { altDate: string; reply: string }>
+  >({});
 
   // New Destination Form State
   const [newDestName, setNewDestName] = useState("");
@@ -332,37 +403,258 @@ export default function AdminDashboardPage() {
     );
   }
 
+  const callAdminAction = async (
+    payload: Record<string, unknown>,
+    successMsg: string
+  ) => {
+    setSaving(true);
+    try {
+      const res = await fetch("/api/traum", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const data = await res.json();
+      if (res.ok && data.store) {
+        setStore(data.store);
+        if (typeof BroadcastChannel !== "undefined") {
+          try {
+            const bc = new BroadcastChannel("traum_live_sync");
+            bc.postMessage({ updatedAt: Date.now() });
+            bc.close();
+          } catch {
+            // Ignore
+          }
+        }
+        setSaveMessage(successMsg);
+        setTimeout(() => setSaveMessage(null), 4000);
+        return data;
+      } else {
+        setSaveMessage(data.error || "No se pudo completar la acción");
+        setTimeout(() => setSaveMessage(null), 4000);
+      }
+    } finally {
+      setSaving(false);
+    }
+    return null;
+  };
+
   // Handlers for Departures
-  const handleAddDeparture = (e: React.FormEvent) => {
+  const handleAddDeparture = async (e: React.FormEvent) => {
     e.preventDefault();
-    const created: CalendarDeparture = {
-      id: `dep-${Date.now()}`,
-      date: newDepDate,
-      destination: newDepDestination,
-      experienceType: newDepExperience,
-      serviceGroupType: newDepServiceGroup,
-      maxParticipants: Number(newDepMax) || 2,
-      availableSpots: Number(newDepSpots) || 2,
-      duration: newDepDuration,
-      additionalInfo: newDepInfo,
-      isDemo: false,
-    };
-    const updated: TraumStoreData = {
-      ...store,
-      departures: [...store.departures, created].sort((a, b) =>
-        a.date.localeCompare(b.date)
-      ),
-    };
-    persistStore(updated, "Salida agregada al calendario");
+    await callAdminAction(
+      {
+        type: "MANAGE_DEPARTURE",
+        subAction: "CREATE",
+        date: newDepDate,
+        startTime: newDepStartTime,
+        endTime: newDepEndTime,
+        destination: newDepDestination,
+        experienceType: newDepExperience,
+        maxParticipants: Number(newDepMax) || 2,
+        additionalInfo: newDepInfo,
+        repeatMode: newDepRepeatMode,
+        repeatCount: Number(newDepRepeatCount) || 1,
+      },
+      newDepRepeatMode === "none"
+        ? "Salida programada agregada al calendario"
+        : `Se crearon ${newDepRepeatCount} salidas recurrentes en el calendario`
+    );
     setNewDepInfo("");
   };
 
-  const handleDeleteDeparture = (id: string) => {
-    const updated: TraumStoreData = {
-      ...store,
-      departures: store.departures.filter((d) => d.id !== id),
-    };
-    persistStore(updated, "Salida eliminada del calendario");
+  const handleDuplicateDeparture = async (dep: CalendarDeparture) => {
+    const [y, m, d] = dep.date.split("-").map(Number);
+    const nextWeek = new Date(Date.UTC(y, m - 1, d + 7))
+      .toISOString()
+      .split("T")[0];
+    await callAdminAction(
+      {
+        type: "MANAGE_DEPARTURE",
+        subAction: "DUPLICATE",
+        date: nextWeek,
+        startTime: dep.startTime || "08:00",
+        endTime: dep.endTime || "17:30",
+        destination: dep.destination,
+        experienceType: dep.experienceType,
+        maxParticipants: dep.maxParticipants,
+        additionalInfo: dep.additionalInfo,
+      },
+      `Salida duplicada para el ${nextWeek}`
+    );
+  };
+
+  const handleSaveEditedDeparture = async (departureId: string) => {
+    await callAdminAction(
+      {
+        type: "MANAGE_DEPARTURE",
+        subAction: "UPDATE",
+        departureId,
+        date: editDepDate,
+        startTime: editDepStartTime,
+        endTime: editDepEndTime,
+        destination: editDepDestination,
+        experienceType: editDepExperience,
+        maxParticipants: Number(editDepMax) || 2,
+        additionalInfo: editDepInfo,
+      },
+      "Salida programada actualizada"
+    );
+    setEditingDepId(null);
+  };
+
+  const handleCancelDepartureWithNotification = async (
+    dep: CalendarDeparture
+  ) => {
+    await callAdminAction(
+      {
+        type: "MANAGE_DEPARTURE",
+        subAction: "CANCEL",
+        departureId: dep.id,
+        reason:
+          "Salida cancelada por el guía (reprogramación o condiciones del río).",
+      },
+      `Salida del ${dep.date} cancelada y aviso enviado a todos los anotados`
+    );
+  };
+
+  const handleDeleteDeparture = async (id: string) => {
+    await callAdminAction(
+      {
+        type: "MANAGE_DEPARTURE",
+        subAction: "DELETE",
+        departureId: id,
+      },
+      "Salida eliminada del calendario"
+    );
+  };
+
+  const handleAddManualEnrollment = async (departureId: string) => {
+    if (!manualName.trim() || !manualPhone.trim()) return;
+    await callAdminAction(
+      {
+        type: "ADD_MANUAL_ENROLLMENT",
+        departureId,
+        fullName: manualName.trim(),
+        whatsapp: manualPhone.trim(),
+        email: manualEmail.trim() || "cliente@traumflycast.com",
+        participantsCount: Number(manualCount) || 1,
+      },
+      `Se anotó manualmente a ${manualName.trim()}`
+    );
+    setManualName("");
+    setManualPhone("");
+    setManualEmail("");
+    setManualCount(1);
+    setManualEnrollDepId(null);
+  };
+
+  const handlePromoteFromWaitlist = async (enrollmentId: string) => {
+    await callAdminAction(
+      {
+        type: "PROMOTE_WAITLIST",
+        enrollmentId,
+      },
+      "Pescador promovido de lista de espera a anotación confirmada"
+    );
+  };
+
+  const handleToggleBlockDay = async (
+    dateStr: string,
+    reason?: string,
+    forceBlock?: boolean
+  ) => {
+    await callAdminAction(
+      {
+        type: "TOGGLE_BLOCKED_DAY",
+        date: dateStr,
+        reason: reason || "",
+        forceBlock,
+      },
+      `Estado de bloqueo actualizado para el día ${dateStr}`
+    );
+    setBlockReasonInput("");
+  };
+
+  const handleExportEnrollmentsCsv = (filterDepartureId?: string) => {
+    const list = (store.enrollments || []).filter((e) =>
+      filterDepartureId ? e.departureId === filterDepartureId : true
+    );
+    const headers = [
+      "Codigo",
+      "Fecha_Salida",
+      "Horario",
+      "Rio_Destino",
+      "Tipo_Pesca",
+      "Nombre",
+      "Telefono_WhatsApp",
+      "Email",
+      "Cantidad_Personas",
+      "Estado",
+      "Comentarios",
+      "Fecha_Anotacion",
+    ];
+    const rows = list.map((enr) => {
+      const dep = store.departures.find((d) => d.id === enr.departureId);
+      const cols = [
+        enr.bookingCode,
+        dep?.date || "",
+        dep ? `${dep.startTime || "08:00"}-${dep.endTime || "17:30"}` : "",
+        dep?.destination || "",
+        dep?.experienceType || "",
+        enr.fullName,
+        enr.whatsapp,
+        enr.email,
+        String(enr.participantsCount),
+        enr.status,
+        (enr.comments || "").replace(/"/g, '""'),
+        enr.createdAt,
+      ];
+      return cols.map((c) => `"${c}"`).join(",");
+    });
+    const csvContent = "\uFEFF" + [headers.join(","), ...rows].join("\n");
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filterDepartureId
+      ? `anotados-salida-${filterDepartureId}.csv`
+      : `anotados-traum-${new Date().toISOString().split("T")[0]}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const handleRespondCustomRequest = async (
+    requestId: string,
+    status: CustomRequestStatus,
+    alternativeDate?: string,
+    guideResponse?: string
+  ) => {
+    await callAdminAction(
+      {
+        type: "RESPOND_CUSTOM_REQUEST",
+        requestId,
+        status,
+        alternativeDate,
+        guideResponse,
+      },
+      `Solicitud actualizada a estado: ${status}`
+    );
+  };
+
+  const handleConvertRequestToDeparture = async (
+    requestId: string,
+    mode: "privada" | "abierta"
+  ) => {
+    await callAdminAction(
+      {
+        type: "CONVERT_REQUEST_TO_DEPARTURE",
+        requestId,
+        mode,
+        maxParticipants: mode === "abierta" ? 4 : undefined,
+      },
+      `Solicitud convertida en salida programada (${mode}) con anotación confirmada`
+    );
   };
 
   // Handlers for Destinations
@@ -540,7 +832,21 @@ export default function AdminDashboardPage() {
             }`}
           >
             <Inbox className="w-4 h-4" />
-            <span>Pedidos ({store.inquiries.length})</span>
+            <span>
+              Solicitudes a Pedido ({(store.customRequests || []).length})
+            </span>
+            {(store.customRequests || []).filter(
+              (r) => r.status === "pendiente"
+            ).length > 0 && (
+              <span className="px-2 py-0.5 bg-[#B35B2B] text-white text-[10px] font-bold rounded-full">
+                {
+                  (store.customRequests || []).filter(
+                    (r) => r.status === "pendiente"
+                  ).length
+                }{" "}
+                pend.
+              </span>
+            )}
           </button>
 
           <button
@@ -572,303 +878,827 @@ export default function AdminDashboardPage() {
           </button>
         </div>
 
-        {/* TAB: DEPARTURES */}
+        {/* TAB: DEPARTURES, CALENDAR, WAITLIST & BLOCKED DAYS */}
         {activeTab === "departures" && (
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-            <div className="lg:col-span-5 bg-white border border-[#D8CEB9] p-6 sm:p-8">
-              <h3 className="font-editorial text-2xl text-[#263D32] mb-6 pb-3 border-b border-[#D8CEB9]">
-                Programar nueva salida
-              </h3>
-              <form onSubmit={handleAddDeparture} className="space-y-4">
-                <div>
-                  <label className="block text-[10px] uppercase tracking-[0.2em] font-semibold mb-1">
-                    Fecha de salida *
-                  </label>
-                  <input
-                    type="date"
-                    required
-                    value={newDepDate}
-                    onChange={(e) => setNewDepDate(e.target.value)}
-                    className="w-full px-3 py-2 border border-[#D8CEB9] text-sm"
-                  />
+          <div className="space-y-8">
+            {/* ALERTAS DE LISTA DE ESPERA ACTIVAS */}
+            {(store.waitlistAlerts || []).filter((a) => !a.resolved).length >
+              0 && (
+              <div className="bg-amber-50 border-2 border-amber-500 p-5 space-y-3">
+                <div className="flex items-center gap-2 text-amber-900 font-semibold text-xs uppercase tracking-[0.2em]">
+                  <BellRing className="w-4 h-4 text-amber-700" />
+                  <span>
+                    Avisos de Lista de Espera (Cupos liberados para promover)
+                  </span>
                 </div>
-
-                <div>
-                  <label className="block text-[10px] uppercase tracking-[0.2em] font-semibold mb-1">
-                    Destino / Río *
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    value={newDepDestination}
-                    onChange={(e) => setNewDepDestination(e.target.value)}
-                    placeholder="Ej. Río Chimehuín — Garganta del Diablo"
-                    className="w-full px-3 py-2 border border-[#D8CEB9] text-sm"
-                  />
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-[10px] uppercase tracking-[0.2em] font-semibold mb-1">
-                      Experiencia
-                    </label>
-                    <select
-                      value={newDepExperience}
-                      onChange={(e) =>
-                        setNewDepExperience(
-                          e.target.value as ExperienceModality
-                        )
-                      }
-                      className="w-full px-3 py-2 border border-[#D8CEB9] text-sm"
+                {(store.waitlistAlerts || [])
+                  .filter((a) => !a.resolved)
+                  .map((alert) => (
+                    <div
+                      key={alert.id}
+                      className="p-4 bg-white border border-amber-300 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs"
                     >
-                      <option value="Pesca de vadeo">Pesca de vadeo</option>
-                      <option value="Pesca en balsa">Pesca en balsa</option>
-                      <option value="Salida personalizada">
-                        Salida personalizada
-                      </option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-[10px] uppercase tracking-[0.2em] font-semibold mb-1">
-                      Modalidad servicio
-                    </label>
-                    <select
-                      value={newDepServiceGroup}
-                      onChange={(e) =>
-                        setNewDepServiceGroup(
-                          e.target.value as ServiceGroupType
-                        )
-                      }
-                      className="w-full px-3 py-2 border border-[#D8CEB9] text-sm"
-                    >
-                      <option value="Salida individual">
-                        Salida individual
-                      </option>
-                      <option value="Salida para dos personas">
-                        Salida para dos personas
-                      </option>
-                      <option value="Salida grupal">Salida grupal</option>
-                      <option value="Salida privada o personalizada">
-                        Salida privada o personalizada
-                      </option>
-                    </select>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-[10px] uppercase tracking-[0.2em] font-semibold mb-1">
-                      Cupo máximo
-                    </label>
-                    <input
-                      type="number"
-                      min={1}
-                      max={20}
-                      value={newDepMax}
-                      onChange={(e) => setNewDepMax(Number(e.target.value))}
-                      className="w-full px-3 py-2 border border-[#D8CEB9] text-sm"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[10px] uppercase tracking-[0.2em] font-semibold mb-1">
-                      Lugares disponibles
-                    </label>
-                    <input
-                      type="number"
-                      min={0}
-                      max={20}
-                      value={newDepSpots}
-                      onChange={(e) => setNewDepSpots(Number(e.target.value))}
-                      className="w-full px-3 py-2 border border-[#D8CEB9] text-sm"
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-[10px] uppercase tracking-[0.2em] font-semibold mb-1">
-                    Duración
-                  </label>
-                  <input
-                    type="text"
-                    value={newDepDuration}
-                    onChange={(e) => setNewDepDuration(e.target.value)}
-                    placeholder="Ej. Jornada completa (8 hs)"
-                    className="w-full px-3 py-2 border border-[#D8CEB9] text-sm"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-[10px] uppercase tracking-[0.2em] font-semibold mb-1">
-                    Información adicional
-                  </label>
-                  <textarea
-                    rows={3}
-                    value={newDepInfo}
-                    onChange={(e) => setNewDepInfo(e.target.value)}
-                    placeholder="Detalles técnicos, recomendaciones o puntos de encuentro..."
-                    className="w-full px-3 py-2 border border-[#D8CEB9] text-sm"
-                  />
-                </div>
-
-                <button
-                  type="submit"
-                  disabled={saving}
-                  className="w-full py-3 bg-[#263D32] text-[#F2EFE6] hover:bg-[#65745A] text-xs uppercase tracking-[0.2em] font-semibold flex items-center justify-center gap-2 cursor-pointer"
-                >
-                  <Plus className="w-4 h-4" />
-                  <span>Agregar salida al calendario</span>
-                </button>
-              </form>
-            </div>
-
-            <div className="lg:col-span-7 space-y-4">
-              <h3 className="font-editorial text-2xl text-[#263D32] mb-2">
-                Salidas cargadas ({store.departures.length})
-              </h3>
-              {store.departures.map((dep) => {
-                const enrolledInquiries = (store.inquiries || []).filter(
-                  (inq) =>
-                    inq.departureId === dep.id && inq.status !== "Cancelado"
-                );
-                return (
-                  <div
-                    key={dep.id}
-                    className="bg-white border border-[#D8CEB9] p-5 space-y-4"
-                  >
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                      <div className="space-y-1">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <span className="px-2.5 py-0.5 bg-[#263D32] text-[#F2EFE6] text-xs font-medium">
-                            {dep.date}
-                          </span>
-                          <span className="text-xs uppercase tracking-wider text-[#65745A] font-semibold">
-                            {dep.experienceType}
-                          </span>
-                          <span
-                            className={`px-2 py-0.5 text-[11px] font-semibold ${
-                              dep.availableSpots === 0
-                                ? "bg-red-100 text-red-800"
-                                : "bg-[#D8CEB9]/60 text-[#263D32]"
-                            }`}
-                          >
-                            Cupos libres: {dep.availableSpots ?? dep.maxParticipants} de{" "}
-                            {dep.maxParticipants}
-                          </span>
-                        </div>
-                        <h4 className="font-editorial text-2xl text-[#263D32]">
-                          {dep.destination}
-                        </h4>
-                        <p className="text-xs text-[#746657]">
-                          {dep.serviceGroupType} · {dep.duration}
-                        </p>
-                        {dep.additionalInfo && (
-                          <p className="text-xs text-[#292D29]/75 pt-1">
-                            {dep.additionalInfo}
-                          </p>
-                        )}
+                      <div>
+                        Se liberó lugar en{" "}
+                        <strong>
+                          {alert.destination} ({alert.departureDate})
+                        </strong>{" "}
+                        por baja de {alert.cancelledEnrollmentName}. Primero en
+                        lista de espera:{" "}
+                        <strong className="text-[#263D32]">
+                          {alert.nextWaitlistName} ({alert.nextWaitlistCount}{" "}
+                          pers. · {alert.nextWaitlistPhone})
+                        </strong>
+                        .
                       </div>
-
-                      <div className="flex items-center gap-2 self-start sm:self-center">
-                        <div className="flex items-center border border-[#D8CEB9] bg-[#F2EFE6]">
-                          <button
-                            type="button"
-                            title="Restar 1 cupo libre"
-                            onClick={() => {
-                              const currentSpots =
-                                dep.availableSpots ?? dep.maxParticipants;
-                              const nextSpots = Math.max(0, currentSpots - 1);
-                              persistStore(
-                                {
-                                  ...store,
-                                  departures: store.departures.map((d) =>
-                                    d.id === dep.id
-                                      ? { ...d, availableSpots: nextSpots }
-                                      : d
-                                  ),
-                                },
-                                `Cupos libres de ${dep.destination} actualizados a ${nextSpots}`
-                              );
-                            }}
-                            className="px-2.5 py-1.5 text-xs font-bold text-[#263D32] hover:bg-[#D8CEB9] cursor-pointer"
-                          >
-                            -1 cupo
-                          </button>
-                          <button
-                            type="button"
-                            title="Liberar / sumar 1 cupo libre"
-                            onClick={() => {
-                              const currentSpots =
-                                dep.availableSpots ?? dep.maxParticipants;
-                              const nextSpots = Math.min(
-                                dep.maxParticipants,
-                                currentSpots + 1
-                              );
-                              persistStore(
-                                {
-                                  ...store,
-                                  departures: store.departures.map((d) =>
-                                    d.id === dep.id
-                                      ? { ...d, availableSpots: nextSpots }
-                                      : d
-                                  ),
-                                },
-                                `Cupos libres de ${dep.destination} actualizados a ${nextSpots}`
-                              );
-                            }}
-                            className="px-2.5 py-1.5 text-xs font-bold text-[#263D32] hover:bg-[#D8CEB9] border-l border-[#D8CEB9] cursor-pointer"
-                          >
-                            +1 cupo
-                          </button>
-                        </div>
-
+                      <div className="flex items-center gap-2">
                         <button
                           type="button"
-                          onClick={() => handleDeleteDeparture(dep.id)}
-                          className="p-2.5 text-[#746657] hover:text-red-700 border border-[#D8CEB9] hover:border-red-300 transition-colors cursor-pointer"
-                          aria-label="Eliminar salida"
+                          onClick={() =>
+                            handlePromoteFromWaitlist(
+                              alert.nextWaitlistEnrollmentId
+                            )
+                          }
+                          className="px-3.5 py-2 bg-[#263D32] text-[#F2EFE6] hover:bg-[#65745A] text-[10px] uppercase tracking-wider font-semibold cursor-pointer"
                         >
-                          <Trash2 className="w-4 h-4" />
+                          Promover a Confirmada (1 clic)
                         </button>
+                        <a
+                          href={buildWaUrl(
+                            alert.nextWaitlistPhone,
+                            `Hola ${alert.nextWaitlistName}, te escribimos de TRAUM Fly Cast Patagonia porque se liberó lugar en la salida del ${alert.departureDate} (${alert.destination}). ¡Te confirmamos tu cupo!`
+                          )}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="px-3 py-2 bg-emerald-700 text-white text-[10px] uppercase tracking-wider font-semibold inline-flex items-center gap-1"
+                        >
+                          <span>Avisar WhatsApp</span>
+                          <ExternalLink className="w-3 h-3" />
+                        </a>
                       </div>
                     </div>
+                  ))}
+              </div>
+            )}
 
-                    {/* Active Passengers Enrolled in this Departure */}
-                    {enrolledInquiries.length > 0 && (
-                      <div className="pt-3 border-t border-[#D8CEB9] space-y-2">
-                        <span className="text-[10px] uppercase tracking-[0.2em] text-[#65745A] font-semibold block">
-                          Reservas activas en esta salida ({enrolledInquiries.length}):
-                        </span>
-                        {enrolledInquiries.map((inq) => (
+            {/* VISTA DE CALENDARIO DEL GUÍA + BLOQUEO DE DÍAS + EXPORTACIÓN CSV */}
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+              {/* Calendario Mensual Visual del Guía (7 cols) */}
+              <div className="lg:col-span-7 bg-white border border-[#D8CEB9] p-6">
+                <div className="flex items-center justify-between pb-4 mb-4 border-b border-[#D8CEB9]">
+                  <div>
+                    <span className="text-[10px] uppercase tracking-[0.2em] text-[#65745A] font-semibold block">
+                      Vista General del Guía (Salidas, Anotados, Bloqueos y Solicitudes)
+                    </span>
+                    <h3 className="font-editorial text-2xl text-[#263D32]">
+                      {ADMIN_MONTH_NAMES[adminCalMonth]} {adminCalYear}
+                    </h3>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (adminCalMonth === 0) {
+                          setAdminCalMonth(11);
+                          setAdminCalYear((y) => y - 1);
+                        } else {
+                          setAdminCalMonth((m) => m - 1);
+                        }
+                      }}
+                      className="w-9 h-9 border border-[#D8CEB9] hover:bg-[#263D32] hover:text-[#F2EFE6] flex items-center justify-center cursor-pointer"
+                    >
+                      <ChevronLeft className="w-4 h-4" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (adminCalMonth === 11) {
+                          setAdminCalMonth(0);
+                          setAdminCalYear((y) => y + 1);
+                        } else {
+                          setAdminCalMonth((m) => m + 1);
+                        }
+                      }}
+                      className="w-9 h-9 border border-[#D8CEB9] hover:bg-[#263D32] hover:text-[#F2EFE6] flex items-center justify-center cursor-pointer"
+                    >
+                      <ChevronRight className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-7 gap-1 text-center mb-2">
+                  {ADMIN_WEEKDAYS.map((w) => (
+                    <div
+                      key={w}
+                      className="text-[10px] uppercase tracking-wider text-[#746657] font-semibold py-1"
+                    >
+                      {w}
+                    </div>
+                  ))}
+                </div>
+
+                <div className="grid grid-cols-7 gap-1">
+                  {(() => {
+                    const firstDay = new Date(adminCalYear, adminCalMonth, 1);
+                    const totalDays = new Date(
+                      adminCalYear,
+                      adminCalMonth + 1,
+                      0
+                    ).getDate();
+                    const offset = (firstDay.getDay() + 6) % 7;
+                    const cells: Array<{
+                      day: number | null;
+                      dateStr: string | null;
+                    }> = [];
+                    for (let i = 0; i < offset; i++)
+                      cells.push({ day: null, dateStr: null });
+                    for (let d = 1; d <= totalDays; d++) {
+                      const mPad = String(adminCalMonth + 1).padStart(2, "0");
+                      const dPad = String(d).padStart(2, "0");
+                      cells.push({
+                        day: d,
+                        dateStr: `${adminCalYear}-${mPad}-${dPad}`,
+                      });
+                    }
+                    return cells.map((c, idx) => {
+                      if (!c.day || !c.dateStr) {
+                        return (
                           <div
-                            key={inq.id}
-                            className="p-3 bg-[#F2EFE6]/70 border border-[#D8CEB9] flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs"
-                          >
-                            <div>
-                              <strong className="text-[#263D32]">
-                                {inq.fullName}
-                              </strong>{" "}
-                              ({inq.bookingCode}) ·{" "}
-                              <span className="font-semibold text-[#B35B2B]">
-                                Ocupa {inq.participantsCount} cupo(s)
-                              </span>{" "}
-                              · WhatsApp: {inq.whatsapp}
-                            </div>
-                            <button
-                              type="button"
-                              onClick={() =>
-                                handleCancelOrReleaseInquiry(inq.id, false)
-                              }
-                              className="px-3 py-1.5 bg-[#B35B2B] hover:bg-red-800 text-white text-[10px] uppercase tracking-wider font-semibold cursor-pointer self-start sm:self-center"
+                            key={`adm-empty-${idx}`}
+                            className="h-16 bg-[#F2EFE6]/30"
+                          />
+                        );
+                      }
+                      const dt = c.dateStr;
+                      const isBlk = (store.blockedDays || []).some(
+                        (b) => b.date === dt
+                      );
+                      const deps = (store.departures || []).filter(
+                        (d) => d.date === dt && d.status !== "cancelada"
+                      );
+                      const pendReqs = (store.customRequests || []).filter(
+                        (r) => r.desiredDate === dt && r.status === "pendiente"
+                      );
+                      const confirmedCount = (store.enrollments || [])
+                        .filter(
+                          (e) =>
+                            deps.some((d) => d.id === e.departureId) &&
+                            e.status === "confirmada"
+                        )
+                        .reduce((acc, e) => acc + e.participantsCount, 0);
+
+                      return (
+                        <div
+                          key={dt}
+                          onClick={() => {
+                            setNewDepDate(dt);
+                            setBlockDateInput(dt);
+                          }}
+                          className={`h-16 p-1.5 border text-left flex flex-col justify-between cursor-pointer transition-colors ${
+                            isBlk
+                              ? "bg-red-50 border-red-300 text-red-900"
+                              : deps.length > 0
+                              ? "bg-emerald-50 border-emerald-600/50 text-[#263D32]"
+                              : pendReqs.length > 0
+                              ? "bg-amber-50 border-amber-500/60"
+                              : "bg-[#F2EFE6]/40 border-[#D8CEB9] hover:border-[#263D32]"
+                          }`}
+                        >
+                          <div className="flex items-center justify-between">
+                            <span
+                              className={`text-xs font-semibold ${
+                                isBlk ? "line-through" : ""
+                              }`}
                             >
-                              Dar de baja y liberar {inq.participantsCount} cupo(s)
-                            </button>
+                              {c.day}
+                            </span>
+                            {pendReqs.length > 0 && (
+                              <span
+                                title={`${pendReqs.length} solicitud(es) pendiente(s)`}
+                                className="px-1.5 py-0.2 bg-[#B35B2B] text-white text-[9px] font-bold rounded-full"
+                              >
+                                {pendReqs.length} sol.
+                              </span>
+                            )}
                           </div>
-                        ))}
+                          <div className="text-[9px] leading-tight truncate">
+                            {isBlk ? (
+                              <span className="text-red-700 font-semibold">
+                                Bloqueado
+                              </span>
+                            ) : deps.length > 0 ? (
+                              <span className="font-semibold text-emerald-900">
+                                {deps.length} sal. ({confirmedCount} anot.)
+                              </span>
+                            ) : (
+                              <span className="text-[#746657]">Libre</span>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    });
+                  })()}
+                </div>
+              </div>
+
+              {/* Bloquear / Desbloquear Días + Exportar Anotados CSV (5 cols) */}
+              <div className="lg:col-span-5 space-y-6">
+                <div className="bg-white border border-[#D8CEB9] p-6 space-y-4">
+                  <h4 className="font-editorial text-2xl text-[#263D32] pb-2 border-b border-[#D8CEB9]">
+                    Bloquear / Desbloquear Días
+                  </h4>
+                  <p className="text-xs text-[#746657]">
+                    En los días bloqueados no se permite anotarse ni enviar
+                    solicitudes de salidas a pedido.
+                  </p>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-[10px] uppercase tracking-[0.18em] font-semibold mb-1">
+                        Fecha a bloquear/desbloquear
+                      </label>
+                      <input
+                        type="date"
+                        value={blockDateInput}
+                        onChange={(e) => setBlockDateInput(e.target.value)}
+                        className="w-full px-3 py-2 border border-[#D8CEB9] text-xs"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] uppercase tracking-[0.18em] font-semibold mb-1">
+                        Motivo (Opcional)
+                      </label>
+                      <input
+                        type="text"
+                        value={blockReasonInput}
+                        onChange={(e) => setBlockReasonInput(e.target.value)}
+                        placeholder="Ej. Descanso / Mantenimiento"
+                        className="w-full px-3 py-2 border border-[#D8CEB9] text-xs"
+                      />
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    disabled={saving}
+                    onClick={() =>
+                      handleToggleBlockDay(blockDateInput, blockReasonInput)
+                    }
+                    className="w-full py-2.5 bg-[#263D32] text-[#F2EFE6] hover:bg-[#65745A] text-xs uppercase tracking-[0.18em] font-semibold flex items-center justify-center gap-2 cursor-pointer"
+                  >
+                    <Ban className="w-3.5 h-3.5" />
+                    <span>Bloquear / Desbloquear fecha</span>
+                  </button>
+
+                  {(store.blockedDays || []).length > 0 && (
+                    <div className="pt-3 border-t border-[#D8CEB9] space-y-2 max-h-40 overflow-y-auto">
+                      <span className="text-[10px] uppercase tracking-[0.18em] text-[#746657] font-semibold block">
+                        Días actualmente bloqueados ({(store.blockedDays || []).length}):
+                      </span>
+                      {(store.blockedDays || []).map((b) => (
+                        <div
+                          key={b.date}
+                          className="p-2 bg-[#F2EFE6]/70 border border-[#D8CEB9] flex items-center justify-between text-xs"
+                        >
+                          <span>
+                            <strong>{b.date}</strong>{" "}
+                            {b.reason ? `— ${b.reason}` : ""}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => handleToggleBlockDay(b.date)}
+                            className="text-red-700 hover:underline text-[11px] font-semibold cursor-pointer"
+                          >
+                            Desbloquear
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {/* Exportar anotados a CSV */}
+                <div className="bg-white border border-[#D8CEB9] p-6 space-y-3">
+                  <h4 className="font-editorial text-xl text-[#263D32]">
+                    Exportar Padrón de Anotados (CSV)
+                  </h4>
+                  <p className="text-xs text-[#746657]">
+                    Descargá una planilla CSV compatible con Excel con todas las
+                    anotaciones confirmadas y en lista de espera.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => handleExportEnrollmentsCsv()}
+                    className="w-full py-3 bg-[#D8CEB9] text-[#263D32] hover:bg-[#263D32] hover:text-[#F2EFE6] text-xs uppercase tracking-[0.2em] font-semibold flex items-center justify-center gap-2 transition-colors cursor-pointer"
+                  >
+                    <Download className="w-4 h-4" />
+                    <span>
+                      Exportar todos los anotados a CSV (
+                      {(store.enrollments || []).length})
+                    </span>
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* CREAR SALIDA PROGRAMADA + LISTADO DE SALIDAS CON ANOTADOS */}
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+              <div className="lg:col-span-5 bg-white border border-[#D8CEB9] p-6 sm:p-8">
+                <h3 className="font-editorial text-2xl text-[#263D32] mb-6 pb-3 border-b border-[#D8CEB9]">
+                  Programar nueva salida
+                </h3>
+                <form onSubmit={handleAddDeparture} className="space-y-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div>
+                      <label className="block text-[10px] uppercase tracking-[0.2em] font-semibold mb-1">
+                        Fecha *
+                      </label>
+                      <input
+                        type="date"
+                        required
+                        value={newDepDate}
+                        onChange={(e) => setNewDepDate(e.target.value)}
+                        className="w-full px-3 py-2 border border-[#D8CEB9] text-xs"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] uppercase tracking-[0.2em] font-semibold mb-1">
+                        Hora inicio *
+                      </label>
+                      <input
+                        type="time"
+                        required
+                        value={newDepStartTime}
+                        onChange={(e) => setNewDepStartTime(e.target.value)}
+                        className="w-full px-3 py-2 border border-[#D8CEB9] text-xs"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] uppercase tracking-[0.2em] font-semibold mb-1">
+                        Hora fin (Opc.)
+                      </label>
+                      <input
+                        type="time"
+                        value={newDepEndTime}
+                        onChange={(e) => setNewDepEndTime(e.target.value)}
+                        className="w-full px-3 py-2 border border-[#D8CEB9] text-xs"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] uppercase tracking-[0.2em] font-semibold mb-1">
+                      Río / Destino *
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={newDepDestination}
+                      onChange={(e) => setNewDepDestination(e.target.value)}
+                      placeholder="Ej. Río Chimehuín — Garganta del Diablo"
+                      className="w-full px-3 py-2 border border-[#D8CEB9] text-sm"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-[10px] uppercase tracking-[0.2em] font-semibold mb-1">
+                        Tipo de pesca *
+                      </label>
+                      <select
+                        value={newDepExperience}
+                        onChange={(e) =>
+                          setNewDepExperience(
+                            e.target.value as ExperienceModality
+                          )
+                        }
+                        className="w-full px-3 py-2 border border-[#D8CEB9] text-sm"
+                      >
+                        <option value="Pesca de vadeo">Pesca de vadeo</option>
+                        <option value="Pesca en balsa">Pesca en balsa</option>
+                        <option value="Salida personalizada">
+                          Salida personalizada
+                        </option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-[10px] uppercase tracking-[0.2em] font-semibold mb-1">
+                        Cupos totales *
+                      </label>
+                      <input
+                        type="number"
+                        min={1}
+                        max={20}
+                        value={newDepMax}
+                        onChange={(e) => setNewDepMax(Number(e.target.value))}
+                        className="w-full px-3 py-2 border border-[#D8CEB9] text-sm"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Opción Recurrente */}
+                  <div className="p-3 bg-[#F2EFE6]/60 border border-[#D8CEB9] grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-[10px] uppercase tracking-[0.18em] font-semibold mb-1">
+                        Repetición (Opcional)
+                      </label>
+                      <select
+                        value={newDepRepeatMode}
+                        onChange={(e) =>
+                          setNewDepRepeatMode(
+                            e.target.value as "none" | "daily" | "weekly"
+                          )
+                        }
+                        className="w-full px-2.5 py-2 bg-white border border-[#D8CEB9] text-xs"
+                      >
+                        <option value="none">Salida única (Sin repetir)</option>
+                        <option value="weekly">Repetir cada semana</option>
+                        <option value="daily">Repetir días seguidos</option>
+                      </select>
+                    </div>
+                    {newDepRepeatMode !== "none" && (
+                      <div>
+                        <label className="block text-[10px] uppercase tracking-[0.18em] font-semibold mb-1">
+                          Cantidad de repeticiones
+                        </label>
+                        <input
+                          type="number"
+                          min={2}
+                          max={12}
+                          value={newDepRepeatCount}
+                          onChange={(e) =>
+                            setNewDepRepeatCount(Number(e.target.value))
+                          }
+                          className="w-full px-2.5 py-2 bg-white border border-[#D8CEB9] text-xs"
+                        />
                       </div>
                     )}
                   </div>
-                );
-              })}
+
+                  <div>
+                    <label className="block text-[10px] uppercase tracking-[0.2em] font-semibold mb-1">
+                      Notas de la salida
+                    </label>
+                    <textarea
+                      rows={3}
+                      value={newDepInfo}
+                      onChange={(e) => setNewDepInfo(e.target.value)}
+                      placeholder="Detalles técnicos, recomendaciones o puntos de encuentro..."
+                      className="w-full px-3 py-2 border border-[#D8CEB9] text-sm"
+                    />
+                  </div>
+
+                  <button
+                    type="submit"
+                    disabled={saving}
+                    className="w-full py-3 bg-[#263D32] text-[#F2EFE6] hover:bg-[#65745A] text-xs uppercase tracking-[0.2em] font-semibold flex items-center justify-center gap-2 cursor-pointer"
+                  >
+                    <Plus className="w-4 h-4" />
+                    <span>Agregar salida al calendario</span>
+                  </button>
+                </form>
+              </div>
+
+              <div className="lg:col-span-7 space-y-4">
+                <h3 className="font-editorial text-2xl text-[#263D32] mb-2">
+                  Salidas programadas ({store.departures.length})
+                </h3>
+                {store.departures.map((dep) => {
+                  const depEnrollments = (store.enrollments || []).filter(
+                    (e) => e.departureId === dep.id && e.status !== "cancelada"
+                  );
+                  const isCancelled = dep.status === "cancelada";
+                  const isEditing = editingDepId === dep.id;
+
+                  return (
+                    <div
+                      key={dep.id}
+                      className={`bg-white border p-5 space-y-4 ${
+                        isCancelled
+                          ? "border-red-300 bg-red-50/30 opacity-80"
+                          : "border-[#D8CEB9]"
+                      }`}
+                    >
+                      <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
+                        <div className="space-y-1">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="px-2.5 py-0.5 bg-[#263D32] text-[#F2EFE6] text-xs font-medium">
+                              {dep.date} · {dep.startTime || "08:00"}
+                              {dep.endTime ? ` a ${dep.endTime} hs` : " hs"}
+                            </span>
+                            <span className="text-xs uppercase tracking-wider text-[#65745A] font-semibold">
+                              {dep.experienceType}
+                            </span>
+                            <span
+                              className={`px-2 py-0.5 text-[11px] font-semibold ${
+                                isCancelled
+                                  ? "bg-red-800 text-white"
+                                  : dep.availableSpots === 0
+                                  ? "bg-red-100 text-red-800"
+                                  : "bg-[#D8CEB9]/60 text-[#263D32]"
+                              }`}
+                            >
+                              {isCancelled
+                                ? "ESTADO: CANCELADA"
+                                : `Cupos disponibles: ${dep.availableSpots} de ${dep.maxParticipants}`}
+                            </span>
+                          </div>
+                          <h4 className="font-editorial text-2xl text-[#263D32]">
+                            {dep.destination}
+                          </h4>
+                          {dep.additionalInfo && (
+                            <p className="text-xs text-[#292D29]/75 pt-1">
+                              {dep.additionalInfo}
+                            </p>
+                          )}
+                        </div>
+
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <button
+                            type="button"
+                            title="Editar salida"
+                            onClick={() => {
+                              if (isEditing) {
+                                setEditingDepId(null);
+                              } else {
+                                setEditingDepId(dep.id);
+                                setEditDepDate(dep.date);
+                                setEditDepStartTime(dep.startTime || "08:00");
+                                setEditDepEndTime(dep.endTime || "17:30");
+                                setEditDepDestination(dep.destination);
+                                setEditDepExperience(dep.experienceType);
+                                setEditDepMax(dep.maxParticipants);
+                                setEditDepInfo(dep.additionalInfo || "");
+                              }
+                            }}
+                            className="px-2.5 py-1.5 text-xs border border-[#D8CEB9] hover:border-[#263D32] text-[#263D32] inline-flex items-center gap-1 cursor-pointer"
+                          >
+                            <Edit3 className="w-3.5 h-3.5" />
+                            <span>Editar</span>
+                          </button>
+
+                          <button
+                            type="button"
+                            title="Duplicar salida (+7 días)"
+                            onClick={() => handleDuplicateDeparture(dep)}
+                            className="px-2.5 py-1.5 text-xs border border-[#D8CEB9] hover:border-[#263D32] text-[#263D32] inline-flex items-center gap-1 cursor-pointer"
+                          >
+                            <Copy className="w-3.5 h-3.5" />
+                            <span>Duplicar</span>
+                          </button>
+
+                          <button
+                            type="button"
+                            title="Exportar anotados de esta salida a CSV"
+                            onClick={() => handleExportEnrollmentsCsv(dep.id)}
+                            className="px-2.5 py-1.5 text-xs border border-[#D8CEB9] hover:border-[#263D32] text-[#263D32] inline-flex items-center gap-1 cursor-pointer"
+                          >
+                            <Download className="w-3.5 h-3.5" />
+                            <span>CSV</span>
+                          </button>
+
+                          {!isCancelled && (
+                            <button
+                              type="button"
+                              onClick={() =>
+                                handleCancelDepartureWithNotification(dep)
+                              }
+                              className="px-2.5 py-1.5 text-xs bg-amber-700 hover:bg-red-800 text-white font-semibold cursor-pointer"
+                            >
+                              Cancelar salida y notificar
+                            </button>
+                          )}
+
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteDeparture(dep.id)}
+                            className="p-2 text-[#746657] hover:text-red-700 border border-[#D8CEB9] cursor-pointer"
+                            aria-label="Eliminar salida"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Formulario de edición inline */}
+                      {isEditing && (
+                        <div className="p-4 bg-[#F2EFE6] border border-[#D8CEB9] space-y-3">
+                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                            <input
+                              type="date"
+                              value={editDepDate}
+                              onChange={(e) => setEditDepDate(e.target.value)}
+                              className="px-2.5 py-1.5 bg-white border border-[#D8CEB9] text-xs"
+                            />
+                            <input
+                              type="time"
+                              value={editDepStartTime}
+                              onChange={(e) =>
+                                setEditDepStartTime(e.target.value)
+                              }
+                              className="px-2.5 py-1.5 bg-white border border-[#D8CEB9] text-xs"
+                            />
+                            <input
+                              type="time"
+                              value={editDepEndTime}
+                              onChange={(e) =>
+                                setEditDepEndTime(e.target.value)
+                              }
+                              className="px-2.5 py-1.5 bg-white border border-[#D8CEB9] text-xs"
+                            />
+                          </div>
+                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                            <input
+                              type="text"
+                              value={editDepDestination}
+                              onChange={(e) =>
+                                setEditDepDestination(e.target.value)
+                              }
+                              className="sm:col-span-2 px-2.5 py-1.5 bg-white border border-[#D8CEB9] text-xs"
+                            />
+                            <input
+                              type="number"
+                              min={1}
+                              max={20}
+                              value={editDepMax}
+                              onChange={(e) =>
+                                setEditDepMax(Number(e.target.value))
+                              }
+                              className="px-2.5 py-1.5 bg-white border border-[#D8CEB9] text-xs"
+                            />
+                          </div>
+                          <textarea
+                            rows={2}
+                            value={editDepInfo}
+                            onChange={(e) => setEditDepInfo(e.target.value)}
+                            className="w-full px-2.5 py-1.5 bg-white border border-[#D8CEB9] text-xs"
+                          />
+                          <div className="flex justify-end gap-2">
+                            <button
+                              type="button"
+                              onClick={() => setEditingDepId(null)}
+                              className="px-3 py-1.5 text-xs border border-[#D8CEB9] bg-white cursor-pointer"
+                            >
+                              Cancelar
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() =>
+                                handleSaveEditedDeparture(dep.id)
+                              }
+                              className="px-4 py-1.5 text-xs bg-[#263D32] text-[#F2EFE6] font-semibold cursor-pointer"
+                            >
+                              Guardar cambios
+                            </button>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Lista de anotados por salida + agregar manual + promover lista de espera */}
+                      <div className="pt-3 border-t border-[#D8CEB9] space-y-2.5">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[10px] uppercase tracking-[0.2em] text-[#65745A] font-semibold">
+                            Anotados en esta salida ({depEnrollments.length}):
+                          </span>
+                          {!isCancelled && (
+                            <button
+                              type="button"
+                              onClick={() =>
+                                setManualEnrollDepId(
+                                  manualEnrollDepId === dep.id ? null : dep.id
+                                )
+                              }
+                              className="text-[11px] text-[#263D32] font-semibold inline-flex items-center gap-1 hover:underline cursor-pointer"
+                            >
+                              <UserPlus className="w-3.5 h-3.5" />
+                              <span>Agregar pescador manualmente</span>
+                            </button>
+                          )}
+                        </div>
+
+                        {manualEnrollDepId === dep.id && (
+                          <div className="p-3 bg-[#F2EFE6] border border-[#D8CEB9] grid grid-cols-1 sm:grid-cols-5 gap-2 items-center">
+                            <input
+                              type="text"
+                              placeholder="Nombre *"
+                              value={manualName}
+                              onChange={(e) => setManualName(e.target.value)}
+                              className="px-2.5 py-1.5 bg-white border border-[#D8CEB9] text-xs"
+                            />
+                            <input
+                              type="text"
+                              placeholder="Teléfono/WhatsApp *"
+                              value={manualPhone}
+                              onChange={(e) => setManualPhone(e.target.value)}
+                              className="px-2.5 py-1.5 bg-white border border-[#D8CEB9] text-xs"
+                            />
+                            <input
+                              type="email"
+                              placeholder="Email"
+                              value={manualEmail}
+                              onChange={(e) => setManualEmail(e.target.value)}
+                              className="px-2.5 py-1.5 bg-white border border-[#D8CEB9] text-xs"
+                            />
+                            <input
+                              type="number"
+                              min={1}
+                              max={10}
+                              value={manualCount}
+                              onChange={(e) =>
+                                setManualCount(Number(e.target.value))
+                              }
+                              className="px-2.5 py-1.5 bg-white border border-[#D8CEB9] text-xs"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => handleAddManualEnrollment(dep.id)}
+                              className="px-3 py-1.5 bg-[#263D32] text-[#F2EFE6] text-xs font-semibold cursor-pointer"
+                            >
+                              Guardar
+                            </button>
+                          </div>
+                        )}
+
+                        {depEnrollments.length === 0 ? (
+                          <p className="text-xs text-[#746657] italic">
+                            Aún no hay anotados activos en esta salida.
+                          </p>
+                        ) : (
+                          depEnrollments.map((enr) => (
+                            <div
+                              key={enr.id}
+                              className={`p-3 border flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs ${
+                                enr.status === "lista_espera"
+                                  ? "bg-amber-50 border-amber-300"
+                                  : "bg-[#F2EFE6]/70 border-[#D8CEB9]"
+                              }`}
+                            >
+                              <div>
+                                <span
+                                  className={`px-1.5 py-0.5 text-[9px] uppercase font-bold mr-2 ${
+                                    enr.status === "lista_espera"
+                                      ? "bg-amber-600 text-white"
+                                      : "bg-emerald-800 text-white"
+                                  }`}
+                                >
+                                  {enr.status === "lista_espera"
+                                    ? "Lista de Espera"
+                                    : "Confirmada"}
+                                </span>
+                                <strong className="text-[#263D32]">
+                                  {enr.fullName}
+                                </strong>{" "}
+                                ({enr.bookingCode}) ·{" "}
+                                <span className="font-semibold text-[#B35B2B]">
+                                  {enr.participantsCount} pers.
+                                </span>{" "}
+                                · {enr.whatsapp} · {enr.email}
+                              </div>
+
+                              <div className="flex flex-wrap items-center gap-1.5">
+                                <a
+                                  href={buildWaUrl(
+                                    enr.whatsapp,
+                                    `Hola ${enr.fullName}, te contacto de TRAUM Fly Cast Patagonia por tu anotación (${enr.bookingCode}) para la salida del ${dep.date} en ${dep.destination}.`
+                                  )}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="px-2.5 py-1 bg-emerald-700 hover:bg-emerald-800 text-white text-[10px] uppercase tracking-wider font-semibold inline-flex items-center gap-1"
+                                >
+                                  <span>WhatsApp</span>
+                                  <ExternalLink className="w-3 h-3" />
+                                </a>
+
+                                {enr.status === "lista_espera" &&
+                                  dep.availableSpots >=
+                                    enr.participantsCount && (
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        handlePromoteFromWaitlist(enr.id)
+                                      }
+                                      className="px-2.5 py-1 bg-[#263D32] hover:bg-[#65745A] text-white text-[10px] uppercase tracking-wider font-semibold cursor-pointer"
+                                    >
+                                      Promover a Confirmada
+                                    </button>
+                                  )}
+
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    handleCancelOrReleaseInquiry(enr.id, false)
+                                  }
+                                  className="px-2.5 py-1 bg-[#B35B2B] hover:bg-red-800 text-white text-[10px] uppercase tracking-wider font-semibold cursor-pointer"
+                                >
+                                  Quitar / Cancelar
+                                </button>
+                              </div>
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           </div>
         )}
@@ -1474,150 +2304,250 @@ export default function AdminDashboardPage() {
           </div>
         )}
 
-        {/* TAB: INQUIRIES RECEIVED */}
+        {/* TAB: BANDEJA DE SOLICITUDES A PEDIDO + HISTORIAL DE ANOTACIONES */}
         {activeTab === "inquiries" && (
-          <div className="space-y-6">
+          <div className="space-y-8">
             <div className="bg-white border border-[#D8CEB9] p-6">
               <h3 className="font-editorial text-2xl text-[#263D32] mb-1">
-                Pedidos y Contrataciones Recibidas
+                Bandeja de Solicitudes de Salidas a Pedido (
+                {(store.customRequests || []).length})
               </h3>
               <p className="text-xs text-[#746657]">
-                Todas las contrataciones se guardan en tiempo real en el servidor y se notifican automáticamente por correo a{" "}
-                <strong>{store.settings.notificationEmail || "traumflyfishing9@gmail.com"}</strong>.
+                Revisá las solicitudes en días sin salida programada. Podés
+                aceptar, rechazar, proponer otra fecha, responder con mensaje
+                por mail/WhatsApp o convertir una solicitud aceptada en salida
+                programada (privada o abierta) con un clic.
               </p>
             </div>
 
-            {store.inquiries.length === 0 ? (
-              <div className="bg-white border border-[#D8CEB9] p-12 text-center text-sm text-[#746657]">
-                Aún no se han recibido solicitudes desde el formulario web.
+            {(store.customRequests || []).length === 0 ? (
+              <div className="bg-white border border-[#D8CEB9] p-10 text-center text-sm text-[#746657]">
+                No hay solicitudes de salidas a pedido registradas por el
+                momento.
               </div>
             ) : (
               <div className="space-y-4">
-                {store.inquiries.map((inq) => (
-                  <div
-                    key={inq.id}
-                    className="bg-white border border-[#D8CEB9] p-6 flex flex-col lg:flex-row lg:items-center justify-between gap-4"
-                  >
-                    <div className="space-y-2">
-                      <div className="flex flex-wrap items-center gap-2">
-                        {inq.bookingCode && (
-                          <span className="px-2.5 py-1 bg-[#B35B2B] text-[#F2EFE6] text-xs font-mono font-semibold">
-                            {inq.bookingCode}
-                          </span>
-                        )}
-                        <span className="px-2.5 py-1 bg-[#263D32] text-[#F2EFE6] text-xs font-medium">
-                          Fecha: {inq.desiredDate}
-                        </span>
-                        {inq.departureId ? (
-                          <span className="px-2.5 py-1 bg-[#263D32]/15 text-[#263D32] border border-[#263D32]/30 text-xs font-semibold">
-                            Salida Precargada (Con seña ·{" "}
-                            {inq.spotsReleased
-                              ? "Cupos ya liberados"
-                              : `Ocupa ${inq.participantsCount} cupo/s`}
-                            )
-                          </span>
-                        ) : (
-                          <span className="px-2.5 py-1 bg-[#D8CEB9]/60 text-[#292D29] text-xs font-medium">
-                            Solicitud de Día Libre (Sin seña previa)
-                          </span>
-                        )}
-                        <span className="text-xs text-[#746657]">
-                          {inq.selectedServiceTitle || inq.experienceType} ·{" "}
-                          {inq.serviceGroupType} ({inq.participantsCount} pers.)
-                        </span>
+                {(store.customRequests || []).map((req) => {
+                  const draft = reqResponseDrafts[req.id] || {
+                    altDate: req.alternativeDate || req.desiredDate,
+                    reply: req.guideResponse || "",
+                  };
+
+                  return (
+                    <div
+                      key={req.id}
+                      className="bg-white border border-[#D8CEB9] p-6 space-y-4"
+                    >
+                      <div className="flex flex-col lg:flex-row lg:items-start justify-between gap-4">
+                        <div className="space-y-2">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="px-2.5 py-1 bg-[#263D32] text-[#F2EFE6] text-xs font-mono font-semibold">
+                              {req.requestCode}
+                            </span>
+                            <span
+                              className={`px-2.5 py-1 text-xs uppercase font-bold ${
+                                req.status === "aceptada"
+                                  ? "bg-emerald-100 text-emerald-900"
+                                  : req.status === "rechazada"
+                                  ? "bg-red-100 text-red-900"
+                                  : req.status === "reprogramada"
+                                  ? "bg-amber-100 text-amber-900"
+                                  : "bg-[#D8CEB9] text-[#292D29]"
+                              }`}
+                            >
+                              Estado: {req.status}
+                            </span>
+                            <span className="px-2.5 py-1 bg-[#F2EFE6] border border-[#D8CEB9] text-xs font-medium">
+                              Fecha solicitada: {req.desiredDate} (
+                              {req.preferredSchedule})
+                            </span>
+                            {req.alternativeDate && (
+                              <span className="px-2.5 py-1 bg-amber-50 border border-amber-300 text-xs font-semibold text-amber-900">
+                                Fecha alternativa: {req.alternativeDate}
+                              </span>
+                            )}
+                          </div>
+
+                          <h4 className="font-editorial text-2xl text-[#263D32]">
+                            {req.fullName}{" "}
+                            <span className="text-sm font-sans text-[#746657]">
+                              ({req.participantsCount}{" "}
+                              {req.participantsCount === 1
+                                ? "persona"
+                                : "personas"}
+                              )
+                            </span>
+                          </h4>
+
+                          <div className="text-xs text-[#292D29]/80 flex flex-wrap gap-4">
+                            <span>
+                              <strong>WhatsApp:</strong> {req.whatsapp}
+                            </span>
+                            <span>
+                              <strong>Email:</strong> {req.email}
+                            </span>
+                            <span>
+                              <strong>Río preferido:</strong>{" "}
+                              {req.preferredRiver || "A coordinar"}
+                            </span>
+                            <span>
+                              <strong>Tipo de pesca:</strong>{" "}
+                              {req.experienceType || "A coordinar"}
+                            </span>
+                          </div>
+
+                          {req.comments && (
+                            <p className="text-xs text-[#746657] italic bg-[#F2EFE6] p-3 border border-[#D8CEB9]">
+                              “{req.comments}”
+                            </p>
+                          )}
+                        </div>
+
+                        {/* Acciones rápidas y WhatsApp con mensaje prellenado */}
+                        <div className="flex flex-wrap items-center gap-2">
+                          <a
+                            href={buildWaUrl(
+                              req.whatsapp,
+                              `Hola ${req.fullName}, soy el guía de TRAUM Fly Cast Patagonia. Vi tu solicitud (${req.requestCode}) para salir a pescar el ${req.desiredDate} (${req.preferredSchedule}) para ${req.participantsCount} persona(s). Te escribo para coordinar.`
+                            )}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="px-3.5 py-2 bg-emerald-700 hover:bg-emerald-800 text-white text-xs uppercase tracking-wider font-semibold inline-flex items-center gap-1.5"
+                          >
+                            <span>WhatsApp Prellenado</span>
+                            <ExternalLink className="w-3.5 h-3.5" />
+                          </a>
+
+                          <button
+                            type="button"
+                            onClick={() =>
+                              handleRespondCustomRequest(
+                                req.id,
+                                "aceptada",
+                                draft.altDate,
+                                draft.reply
+                              )
+                            }
+                            className="px-3 py-2 bg-[#263D32] hover:bg-[#65745A] text-[#F2EFE6] text-xs uppercase tracking-wider font-semibold inline-flex items-center gap-1 cursor-pointer"
+                          >
+                            <Check className="w-3.5 h-3.5" />
+                            <span>Aceptar</span>
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() =>
+                              handleRespondCustomRequest(
+                                req.id,
+                                "rechazada",
+                                undefined,
+                                draft.reply
+                              )
+                            }
+                            className="px-3 py-2 bg-[#B35B2B] hover:bg-red-800 text-white text-xs uppercase tracking-wider font-semibold inline-flex items-center gap-1 cursor-pointer"
+                          >
+                            <XCircle className="w-3.5 h-3.5" />
+                            <span>Rechazar</span>
+                          </button>
+                        </div>
                       </div>
 
-                      <h4 className="font-editorial text-2xl text-[#263D32]">
-                        {inq.fullName}
-                      </h4>
+                      {/* Responder, proponer otra fecha y convertir en salida programada con 1 clic */}
+                      <div className="pt-3 border-t border-[#D8CEB9] grid grid-cols-1 lg:grid-cols-12 gap-3 items-end">
+                        <div className="lg:col-span-3">
+                          <label className="block text-[10px] uppercase tracking-[0.18em] text-[#746657] font-semibold mb-1">
+                            Fecha alternativa (Reprogramar)
+                          </label>
+                          <input
+                            type="date"
+                            value={draft.altDate}
+                            onChange={(e) =>
+                              setReqResponseDrafts({
+                                ...reqResponseDrafts,
+                                [req.id]: {
+                                  ...draft,
+                                  altDate: e.target.value,
+                                },
+                              })
+                            }
+                            className="w-full px-3 py-2 bg-[#F2EFE6] border border-[#D8CEB9] text-xs"
+                          />
+                        </div>
 
-                      <div className="text-xs text-[#292D29]/80 flex flex-wrap gap-4">
-                        <span>
-                          <strong>Email:</strong> {inq.email}
-                        </span>
-                        {inq.googleEmail && (
-                          <span className="text-[#263D32]">
-                            <strong>Cuenta Google:</strong> {inq.googleEmail}
-                          </span>
-                        )}
-                        <span>
-                          <strong>WhatsApp:</strong> {inq.whatsapp}
-                        </span>
-                        <span>
-                          <strong>Legal:</strong>{" "}
-                          {inq.legalAccepted ? "Aceptado" : "Pendiente"} (
-                          {inq.legalAcceptedAt
-                            ? new Date(inq.legalAcceptedAt).toLocaleString("es-AR")
-                            : inq.createdAt}
-                          )
-                        </span>
+                        <div className="lg:col-span-5">
+                          <label className="block text-[10px] uppercase tracking-[0.18em] text-[#746657] font-semibold mb-1">
+                            Respuesta del guía (Se envía por email al cliente)
+                          </label>
+                          <input
+                            type="text"
+                            placeholder="Ej. Te propongo salir temprano en el Chimehuín..."
+                            value={draft.reply}
+                            onChange={(e) =>
+                              setReqResponseDrafts({
+                                ...reqResponseDrafts,
+                                [req.id]: {
+                                  ...draft,
+                                  reply: e.target.value,
+                                },
+                              })
+                            }
+                            className="w-full px-3 py-2 bg-[#F2EFE6] border border-[#D8CEB9] text-xs"
+                          />
+                        </div>
+
+                        <div className="lg:col-span-4 flex flex-wrap gap-2">
+                          <button
+                            type="button"
+                            onClick={() =>
+                              handleRespondCustomRequest(
+                                req.id,
+                                "reprogramada",
+                                draft.altDate,
+                                draft.reply
+                              )
+                            }
+                            className="px-3 py-2 bg-amber-600 hover:bg-amber-700 text-white text-[10px] uppercase tracking-wider font-semibold cursor-pointer"
+                          >
+                            Proponer Fecha / Responder
+                          </button>
+
+                          {!req.convertedToDepartureId ? (
+                            <>
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  handleConvertRequestToDeparture(
+                                    req.id,
+                                    "privada"
+                                  )
+                                }
+                                className="px-3 py-2 bg-[#263D32] hover:bg-[#65745A] text-[#F2EFE6] text-[10px] uppercase tracking-wider font-semibold cursor-pointer"
+                              >
+                                Convertir en Salida Privada (1 clic)
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  handleConvertRequestToDeparture(
+                                    req.id,
+                                    "abierta"
+                                  )
+                                }
+                                className="px-3 py-2 border border-[#263D32] text-[#263D32] hover:bg-[#263D32] hover:text-[#F2EFE6] text-[10px] uppercase tracking-wider font-semibold cursor-pointer"
+                              >
+                                Convertir en Salida Abierta (1 clic)
+                              </button>
+                            </>
+                          ) : (
+                            <span className="px-3 py-2 bg-emerald-50 border border-emerald-400 text-emerald-900 text-[10px] uppercase font-bold">
+                              Ya convertida en salida programada
+                            </span>
+                          )}
+                        </div>
                       </div>
-
-                      {inq.comments && (
-                        <p className="text-xs text-[#746657] italic bg-[#F2EFE6] p-3 border border-[#D8CEB9]">
-                          “{inq.comments}”
-                        </p>
-                      )}
                     </div>
-
-                    <div className="flex flex-wrap items-center gap-2">
-                      <select
-                        value={inq.status}
-                        onChange={(e) => {
-                          const newStatus = e.target.value as
-                            | "Pendiente"
-                            | "Contactado"
-                            | "Confirmado"
-                            | "Cancelado";
-                          if (newStatus === "Cancelado") {
-                            handleCancelOrReleaseInquiry(inq.id, false);
-                            return;
-                          }
-                          const updated: TraumStoreData = {
-                            ...store,
-                            inquiries: store.inquiries.map((item) =>
-                              item.id === inq.id
-                                ? { ...item, status: newStatus }
-                                : item
-                            ),
-                          };
-                          persistStore(updated, "Estado de solicitud actualizado");
-                        }}
-                        className="px-3 py-2 border border-[#D8CEB9] text-xs uppercase tracking-wider font-semibold bg-[#F2EFE6]"
-                      >
-                        <option value="Pendiente">Pendiente</option>
-                        <option value="Contactado">Contactado</option>
-                        <option value="Confirmado">Confirmado</option>
-                        <option value="Cancelado">Cancelado (Baja)</option>
-                      </select>
-
-                      {inq.status !== "Cancelado" && (
-                        <button
-                          type="button"
-                          onClick={() =>
-                            handleCancelOrReleaseInquiry(inq.id, false)
-                          }
-                          className="px-3 py-2 bg-[#B35B2B] hover:bg-red-800 text-white text-xs uppercase tracking-wider font-semibold cursor-pointer"
-                        >
-                          {inq.departureId && !inq.spotsReleased
-                            ? `Dar de baja y liberar ${inq.participantsCount} cupo(s)`
-                            : "Dar de baja"}
-                        </button>
-                      )}
-
-                      <button
-                        type="button"
-                        onClick={() =>
-                          handleCancelOrReleaseInquiry(inq.id, true)
-                        }
-                        title="Eliminar pedido y liberar cupos si corresponde"
-                        className="p-2 border border-[#D8CEB9] text-[#746657] hover:text-red-700 hover:border-red-300 cursor-pointer"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>

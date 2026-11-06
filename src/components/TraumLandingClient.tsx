@@ -160,6 +160,9 @@ export default function TraumLandingClient({
         <RevealSection>
           <CalendarSection
             departures={store.departures}
+            blockedDays={store.blockedDays}
+            destinations={store.destinations}
+            onDataChanged={notifyLiveChange}
             onRequestBookingFromCalendar={(prefill) =>
               handleOpenBookingModal({
                 ...prefill,

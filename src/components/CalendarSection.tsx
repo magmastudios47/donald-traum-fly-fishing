@@ -1,7 +1,15 @@
 "use client";
 
-import React, { useState, useMemo } from "react";
-import { CalendarDeparture } from "@/types/traum";
+import React, { useState, useMemo, useEffect } from "react";
+import {
+  BlockedDay,
+  CalendarDeparture,
+  CustomTripRequest,
+  DepartureEnrollment,
+  DestinationItem,
+  ExperienceModality,
+  PreferredScheduleType,
+} from "@/types/traum";
 import {
   ChevronLeft,
   ChevronRight,
@@ -10,11 +18,19 @@ import {
   Clock,
   MapPin,
   Compass,
+  CheckCircle2,
+  AlertCircle,
+  Ban,
+  Filter,
+  RotateCcw,
 } from "lucide-react";
 
 interface CalendarSectionProps {
   departures: CalendarDeparture[];
-  onRequestBookingFromCalendar: (prefill: {
+  blockedDays?: BlockedDay[];
+  destinations?: DestinationItem[];
+  onDataChanged?: () => void;
+  onRequestBookingFromCalendar?: (prefill: {
     date: string;
     departureId?: string;
     requiresDeposit?: boolean;
@@ -45,24 +61,161 @@ const MONTH_NAMES = [
 
 const WEEKDAYS = ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"];
 
+const FISHING_TYPES: ExperienceModality[] = [
+  "Pesca de vadeo",
+  "Pesca en balsa",
+  "Salida personalizada",
+];
+
+const SCHEDULES: PreferredScheduleType[] = ["Mañana", "Tarde", "Todo el día"];
+
+function getClientArgentinaToday(): string {
+  try {
+    return new Intl.DateTimeFormat("en-CA", {
+      timeZone: "America/Argentina/Buenos_Aires",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).format(new Date());
+  } catch {
+    const now = new Date(Date.now() - 3 * 60 * 60 * 1000);
+    return now.toISOString().split("T")[0];
+  }
+}
+
 export default function CalendarSection({
   departures,
-  onRequestBookingFromCalendar,
+  blockedDays = [],
+  destinations = [],
+  onDataChanged,
 }: CalendarSectionProps) {
+  const [todayAR, setTodayAR] = useState<string>("2026-11-05");
+
   const [currentMonth, setCurrentMonth] = useState<number>(10); // Noviembre
   const [currentYear, setCurrentYear] = useState<number>(2026);
   const [selectedDateStr, setSelectedDateStr] = useState<string>("2026-11-12");
 
-  const departuresByDate = useMemo(() => {
+  // Filtros de calendario
+  const [filterRiver, setFilterRiver] = useState<string>("ALL");
+  const [filterType, setFilterType] = useState<string>("ALL");
+
+  // Estado del formulario de Anotación en Salida Programada
+  const [activeEnrollmentDepId, setActiveEnrollmentDepId] = useState<
+    string | null
+  >(null);
+  const [enrollName, setEnrollName] = useState("");
+  const [enrollPhone, setEnrollPhone] = useState("");
+  const [enrollEmail, setEnrollEmail] = useState("");
+  const [enrollCount, setEnrollCount] = useState(1);
+  const [enrollComments, setEnrollComments] = useState("");
+  const [enrollHoneypot, setEnrollHoneypot] = useState("");
+  const [enrollSubmitting, setEnrollSubmitting] = useState(false);
+  const [enrollError, setEnrollError] = useState("");
+  const [waitlistPrompt, setWaitlistPrompt] = useState<{
+    availableSpots: number;
+    requestedSpots: number;
+  } | null>(null);
+  const [confirmedEnrollment, setConfirmedEnrollment] = useState<{
+    enrollment: DepartureEnrollment;
+    departure: CalendarDeparture;
+  } | null>(null);
+
+  // Estado del formulario de Solicitud de Salida a Pedido
+  const [showCustomRequestForm, setShowCustomRequestForm] = useState(false);
+  const [reqSchedule, setReqSchedule] =
+    useState<PreferredScheduleType>("Todo el día");
+  const [reqRiver, setReqRiver] = useState("");
+  const [reqType, setReqType] = useState<string>("");
+  const [reqCount, setReqCount] = useState(2);
+  const [reqName, setReqName] = useState("");
+  const [reqPhone, setReqPhone] = useState("");
+  const [reqEmail, setReqEmail] = useState("");
+  const [reqMessage, setReqMessage] = useState("");
+  const [reqHoneypot, setReqHoneypot] = useState("");
+  const [reqSubmitting, setReqSubmitting] = useState(false);
+  const [reqError, setReqError] = useState("");
+  const [confirmedCustomRequest, setConfirmedCustomRequest] = useState<{
+    request: CustomTripRequest;
+    message: string;
+  } | null>(null);
+
+  useEffect(() => {
+    const arToday = getClientArgentinaToday();
+    setTodayAR(arToday);
+    // Si la fecha actual es posterior a noviembre 2026 o si queremos centrar en la primera salida futura
+    const upcoming = departures
+      .filter((d) => d.status !== "cancelada" && d.date >= arToday)
+      .sort((a, b) => a.date.localeCompare(b.date))[0];
+    if (upcoming) {
+      const [y, m] = upcoming.date.split("-").map(Number);
+      setCurrentYear(y);
+      setCurrentMonth(m - 1);
+      setSelectedDateStr(upcoming.date);
+    } else {
+      const [y, m] = arToday.split("-").map(Number);
+      setCurrentYear(y);
+      setCurrentMonth(m - 1);
+      setSelectedDateStr(arToday);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Lista única de ríos para el filtro y selector
+  const riverOptions = useMemo(() => {
+    const set = new Set<string>();
+    for (const d of departures) {
+      if (d.destination) set.add(d.destination);
+    }
+    for (const dest of destinations) {
+      if (dest.name) set.add(dest.name);
+    }
+    return Array.from(set);
+  }, [departures, destinations]);
+
+  // Salidas activas filtradas por río y tipo de pesca
+  const filteredActiveDepartures = useMemo(() => {
+    return departures.filter((dep) => {
+      if (dep.status === "cancelada") return false;
+      if (filterRiver !== "ALL" && !dep.destination.includes(filterRiver)) {
+        return false;
+      }
+      if (filterType !== "ALL" && dep.experienceType !== filterType) {
+        return false;
+      }
+      return true;
+    });
+  }, [departures, filterRiver, filterType]);
+
+  // Todas las salidas activas por fecha (sin filtro) para validar si el día permite solicitud a pedido
+  const allActiveDeparturesByDate = useMemo(() => {
     const map: Record<string, CalendarDeparture[]> = {};
     for (const dep of departures) {
+      if (dep.status === "cancelada") continue;
+      if (!map[dep.date]) map[dep.date] = [];
+      map[dep.date].push(dep);
+    }
+    return map;
+  }, [departures]);
+
+  // Salidas filtradas por fecha para mostrar en grilla
+  const departuresByDate = useMemo(() => {
+    const map: Record<string, CalendarDeparture[]> = {};
+    for (const dep of filteredActiveDepartures) {
       if (!map[dep.date]) {
         map[dep.date] = [];
       }
       map[dep.date].push(dep);
     }
     return map;
-  }, [departures]);
+  }, [filteredActiveDepartures]);
+
+  const blockedByDate = useMemo(() => {
+    const map: Record<string, BlockedDay> = {};
+    for (const b of blockedDays) {
+      map[b.date] = b;
+    }
+    return map;
+  }, [blockedDays]);
 
   const calendarDays = useMemo(() => {
     const firstDayOfMonth = new Date(currentYear, currentMonth, 1);
@@ -84,6 +237,17 @@ export default function CalendarSection({
     return cells;
   }, [currentMonth, currentYear]);
 
+  const handleSelectDate = (dateStr: string) => {
+    setSelectedDateStr(dateStr);
+    setActiveEnrollmentDepId(null);
+    setWaitlistPrompt(null);
+    setEnrollError("");
+    setConfirmedEnrollment(null);
+    setShowCustomRequestForm(false);
+    setReqError("");
+    setConfirmedCustomRequest(null);
+  };
+
   const handlePrevMonth = () => {
     if (currentMonth === 0) {
       setCurrentMonth(11);
@@ -102,9 +266,12 @@ export default function CalendarSection({
     }
   };
 
-  const selectedDepartures = selectedDateStr
-    ? departuresByDate[selectedDateStr] || []
-    : [];
+  const handleJumpToToday = () => {
+    const [y, m] = todayAR.split("-").map(Number);
+    setCurrentYear(y);
+    setCurrentMonth(m - 1);
+    handleSelectDate(todayAR);
+  };
 
   const formatReadableDate = (isoDate: string) => {
     const parts = isoDate.split("-");
@@ -115,6 +282,140 @@ export default function CalendarSection({
     return `${d} de ${MONTH_NAMES[m] || ""} de ${y}`;
   };
 
+  // Estado del día seleccionado
+  const selectedIsPast = selectedDateStr < todayAR;
+  const selectedBlocked = blockedByDate[selectedDateStr];
+  const selectedDepartures = selectedDateStr
+    ? departuresByDate[selectedDateStr] || []
+    : [];
+  const selectedUnfilteredDepartures = selectedDateStr
+    ? allActiveDeparturesByDate[selectedDateStr] || []
+    : [];
+
+  // Enviar anotación en salida programada
+  const submitEnrollment = async (
+    departure: CalendarDeparture,
+    acceptWaitlistFlag: boolean
+  ) => {
+    setEnrollError("");
+    if (enrollName.trim().length < 2) {
+      setEnrollError("Ingresá tu nombre y apellido.");
+      return;
+    }
+    if (enrollPhone.replace(/\D/g, "").length < 6) {
+      setEnrollError("Ingresá un teléfono o WhatsApp válido.");
+      return;
+    }
+    if (!enrollEmail.includes("@")) {
+      setEnrollError("Ingresá un email válido.");
+      return;
+    }
+
+    setEnrollSubmitting(true);
+    try {
+      const res = await fetch("/api/traum", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          type: "ENROLL_DEPARTURE",
+          departureId: departure.id,
+          fullName: enrollName.trim(),
+          whatsapp: enrollPhone.trim(),
+          email: enrollEmail.trim(),
+          participantsCount: enrollCount,
+          comments: enrollComments.trim(),
+          acceptWaitlist: acceptWaitlistFlag,
+          website_hp: enrollHoneypot,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        if (data.canJoinWaitlist) {
+          setWaitlistPrompt({
+            availableSpots: Number(data.availableSpots) || 0,
+            requestedSpots: Number(data.requestedSpots) || enrollCount,
+          });
+          setEnrollError(data.error || "");
+          return;
+        }
+        setEnrollError(data.error || "No se pudo completar la anotación.");
+        return;
+      }
+
+      setConfirmedEnrollment({
+        enrollment: data.enrollment,
+        departure: data.departure || departure,
+      });
+      setWaitlistPrompt(null);
+      setActiveEnrollmentDepId(null);
+      if (onDataChanged) onDataChanged();
+    } catch {
+      setEnrollError("Error de conexión. Intentá nuevamente.");
+    } finally {
+      setEnrollSubmitting(false);
+    }
+  };
+
+  // Enviar solicitud de salida a pedido
+  const submitCustomRequest = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setReqError("");
+
+    if (reqName.trim().length < 2) {
+      setReqError("Ingresá tu nombre y apellido.");
+      return;
+    }
+    if (reqPhone.replace(/\D/g, "").length < 6) {
+      setReqError("Ingresá un teléfono o WhatsApp válido.");
+      return;
+    }
+    if (!reqEmail.includes("@")) {
+      setReqError("Ingresá un email válido.");
+      return;
+    }
+
+    setReqSubmitting(true);
+    try {
+      const res = await fetch("/api/traum", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          type: "CREATE_CUSTOM_REQUEST",
+          desiredDate: selectedDateStr,
+          preferredSchedule: reqSchedule,
+          preferredRiver: reqRiver || undefined,
+          experienceType: reqType || undefined,
+          participantsCount: reqCount,
+          fullName: reqName.trim(),
+          whatsapp: reqPhone.trim(),
+          email: reqEmail.trim(),
+          comments: reqMessage.trim(),
+          website_hp: reqHoneypot,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        setReqError(data.error || "No se pudo enviar la solicitud.");
+        return;
+      }
+
+      setConfirmedCustomRequest({
+        request: data.customRequest,
+        message:
+          data.confirmationMessage ||
+          "El guía te va a contactar para coordinar. No se requiere seña ni pago por este medio.",
+      });
+      setShowCustomRequestForm(false);
+      if (onDataChanged) onDataChanged();
+    } catch {
+      setReqError("Error de conexión. Intentá nuevamente.");
+    } finally {
+      setReqSubmitting(false);
+    }
+  };
+
   return (
     <section
       id="calendario"
@@ -122,12 +423,12 @@ export default function CalendarSection({
     >
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-10">
         {/* Header */}
-        <div className="flex flex-col lg:flex-row lg:items-end justify-between mb-12 gap-6">
+        <div className="flex flex-col lg:flex-row lg:items-end justify-between mb-10 gap-6">
           <div>
             <div className="flex items-center gap-3 mb-4">
               <span className="w-8 h-[1px] bg-[#263D32]" />
               <span className="text-xs uppercase tracking-[0.28em] text-[#65745A] font-semibold">
-                Calendario de salidas y reservas
+                Calendario de salidas y reservas (UTC-3 Argentina)
               </span>
             </div>
             <h2 className="font-editorial text-4xl sm:text-5xl lg:text-6xl text-[#263D32] leading-tight">
@@ -137,44 +438,77 @@ export default function CalendarSection({
           </div>
 
           <p className="text-sm sm:text-base text-[#292D29]/80 max-w-md font-light leading-relaxed">
-            Consultá las salidas programadas o seleccioná cualquier día del
-            calendario para proponernos tu propia fecha en modalidad individual,
-            dúo, grupal o privada.
+            Anotate directamente en una{" "}
+            <strong className="font-medium text-[#263D32]">
+              salida programada
+            </strong>{" "}
+            o elegí cualquier día libre del calendario para solicitar una{" "}
+            <strong className="font-medium text-[#263D32]">
+              salida a pedido
+            </strong>{" "}
+            directamente con el guía.
           </p>
         </div>
 
-        {/* Service Modalities Bar */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-8 sm:mb-10">
-          {[
-            {
-              title: "Salida individual",
-              desc: "Atención 1 a 1 con guía dedicado",
-            },
-            {
-              title: "Salida para dos personas",
-              desc: "Formato clásico en balsa o vadeo compartido",
-            },
-            {
-              title: "Salida grupal",
-              desc: "Coordinación multi-guía y múltiples balsas",
-            },
-            {
-              title: "Salida privada o personalizada",
-              desc: "Itinerario exclusivo diseñado a medida",
-            },
-          ].map((item) => (
-            <div
-              key={item.title}
-              className="p-3.5 sm:p-4 bg-[#D8CEB9]/35 border border-[#D8CEB9] flex flex-col justify-between"
+        {/* Barra de Filtros por Río y Tipo de Pesca */}
+        <div className="bg-[#D8CEB9]/35 border border-[#D8CEB9] p-4 sm:p-5 mb-8 flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4">
+          <div className="flex items-center gap-2.5 text-xs uppercase tracking-[0.2em] text-[#263D32] font-semibold">
+            <Filter className="w-4 h-4 text-[#65745A]" />
+            <span>Filtrar salidas programadas:</span>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 flex-1 max-w-2xl">
+            <select
+              value={filterRiver}
+              onChange={(e) => setFilterRiver(e.target.value)}
+              className="px-3.5 py-2.5 bg-[#F2EFE6] border border-[#D8CEB9] text-xs text-[#292D29] focus:outline-none focus:border-[#263D32]"
+              aria-label="Filtrar por río"
             >
-              <span className="font-editorial text-lg sm:text-xl text-[#263D32] font-medium">
-                {item.title}
-              </span>
-              <span className="text-xs text-[#746657] mt-1 font-light">
-                {item.desc}
-              </span>
+              <option value="ALL">Todos los ríos y ambientes</option>
+              {riverOptions.map((r) => (
+                <option key={r} value={r}>
+                  {r}
+                </option>
+              ))}
+            </select>
+
+            <select
+              value={filterType}
+              onChange={(e) => setFilterType(e.target.value)}
+              className="px-3.5 py-2.5 bg-[#F2EFE6] border border-[#D8CEB9] text-xs text-[#292D29] focus:outline-none focus:border-[#263D32]"
+              aria-label="Filtrar por tipo de pesca"
+            >
+              <option value="ALL">Todos los tipos de pesca</option>
+              {FISHING_TYPES.map((t) => (
+                <option key={t} value={t}>
+                  {t}
+                </option>
+              ))}
+            </select>
+
+            <div className="flex items-center gap-2">
+              {(filterRiver !== "ALL" || filterType !== "ALL") && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setFilterRiver("ALL");
+                    setFilterType("ALL");
+                  }}
+                  className="px-3 py-2.5 bg-white border border-[#D8CEB9] hover:border-[#263D32] text-xs text-[#263D32] inline-flex items-center gap-1.5 cursor-pointer"
+                >
+                  <RotateCcw className="w-3.5 h-3.5" />
+                  <span>Limpiar</span>
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={handleJumpToToday}
+                className="w-full px-3.5 py-2.5 bg-[#263D32] text-[#F2EFE6] hover:bg-[#65745A] text-xs uppercase tracking-[0.16em] font-semibold transition-colors cursor-pointer"
+              >
+                Ir a Hoy
+              </button>
             </div>
-          ))}
+          </div>
         </div>
 
         {/* Interactive Calendar + Selected Date Details Card */}
@@ -185,7 +519,7 @@ export default function CalendarSection({
             <div className="flex items-center justify-between pb-4 sm:pb-6 mb-4 sm:mb-6 border-b border-[#D8CEB9]">
               <div>
                 <span className="text-[10px] sm:text-[11px] uppercase tracking-[0.22em] text-[#746657] block">
-                  Temporada de Pesca
+                  Temporada de Pesca · Patagonia
                 </span>
                 <h3 className="font-editorial text-2xl sm:text-3xl lg:text-4xl text-[#263D32]">
                   {MONTH_NAMES[currentMonth]} {currentYear}
@@ -236,61 +570,140 @@ export default function CalendarSection({
                   );
                 }
 
-                const dayDepartures = departuresByDate[cell.dateStr] || [];
+                const dateStr = cell.dateStr;
+                const isPast = dateStr < todayAR;
+                const isToday = dateStr === todayAR;
+                const isBlocked = Boolean(blockedByDate[dateStr]);
+                const dayDepartures = departuresByDate[dateStr] || [];
                 const hasDepartures = dayDepartures.length > 0;
-                const isSelected = selectedDateStr === cell.dateStr;
+                const isSelected = selectedDateStr === dateStr;
+
+                // Cálculo de cupos totales disponibles en ese día
+                const totalAvailableSpots = dayDepartures.reduce(
+                  (acc, dep) =>
+                    acc + Math.max(0, Number(dep.availableSpots ?? dep.maxParticipants)),
+                  0
+                );
+
+                // Reglas de colores del calendario mensual:
+                // - Tachado: bloqueado o fecha pasada
+                // - Verde: salida con cupo (> 2 cupos libres)
+                // - Amarillo: <= 2 cupos libres (1 o 2 cupos)
+                // - Rojo: completa (0 cupos libres, con lista de espera)
+                // - Gris: sin salida (se puede solicitar salida a pedido)
+                let colorClasses =
+                  "bg-[#E6E2D8]/70 text-[#292D29] border-[#D8CEB9] hover:border-[#746657]"; // Gris: sin salida
+                let badgeDotColor = "bg-[#746657]";
+                let statusShortLabel = "A pedido";
+
+                if (isBlocked || isPast) {
+                  colorClasses =
+                    "bg-[#D8CEB9]/25 text-[#746657]/60 border-[#D8CEB9]/60 cursor-pointer";
+                  badgeDotColor = "bg-[#746657]/40";
+                  statusShortLabel = isBlocked ? "Bloqueado" : "Pasado";
+                } else if (hasDepartures) {
+                  if (totalAvailableSpots === 0) {
+                    // Rojo: completa (con lista de espera)
+                    colorClasses =
+                      "bg-red-900/15 text-red-900 border-red-700/50 hover:bg-red-900/25";
+                    badgeDotColor = "bg-red-700";
+                    statusShortLabel = "Completa";
+                  } else if (totalAvailableSpots <= 2) {
+                    // Amarillo: <= 2 cupos
+                    colorClasses =
+                      "bg-amber-500/20 text-amber-950 border-amber-600/60 hover:bg-amber-500/30";
+                    badgeDotColor = "bg-amber-600";
+                    statusShortLabel = `${totalAvailableSpots} cupo${
+                      totalAvailableSpots === 1 ? "" : "s"
+                    }`;
+                  } else {
+                    // Verde: salida con cupo (> 2 cupos)
+                    colorClasses =
+                      "bg-emerald-800/15 text-[#263D32] border-emerald-700/60 hover:bg-emerald-800/25";
+                    badgeDotColor = "bg-emerald-700";
+                    statusShortLabel = `${totalAvailableSpots} cupos`;
+                  }
+                }
+
+                if (isSelected) {
+                  colorClasses =
+                    "bg-[#263D32] text-[#F2EFE6] border-[#263D32] shadow-md ring-2 ring-[#263D32]/30";
+                }
 
                 return (
                   <button
-                    key={cell.dateStr}
+                    key={dateStr}
                     type="button"
-                    onClick={() => setSelectedDateStr(cell.dateStr!)}
-                    className={`aspect-square p-1.5 sm:p-2 border transition-all duration-300 flex flex-col items-start justify-between relative cursor-pointer ${
-                      isSelected
-                        ? "bg-[#263D32] text-[#F2EFE6] border-[#263D32] shadow-md"
-                        : hasDepartures
-                        ? "bg-[#65745A]/15 text-[#263D32] border-[#65745A] hover:bg-[#65745A]/25"
-                        : "bg-[#F2EFE6] text-[#292D29] border-[#D8CEB9] hover:border-[#746657]"
-                    }`}
+                    onClick={() => handleSelectDate(dateStr)}
+                    className={`aspect-square p-1.5 sm:p-2 border transition-all duration-200 flex flex-col items-start justify-between relative cursor-pointer ${colorClasses}`}
                   >
-                    <span className="text-xs sm:text-sm font-medium">
-                      {cell.day}
-                    </span>
-
-                    {hasDepartures && (
-                      <div className="w-full flex items-center justify-between mt-auto">
+                    <div className="w-full flex items-center justify-between">
+                      <span
+                        className={`text-xs sm:text-sm font-semibold ${
+                          isBlocked || isPast ? "line-through opacity-75" : ""
+                        }`}
+                      >
+                        {cell.day}
+                      </span>
+                      {isToday && (
                         <span
-                          className={`w-2 h-2 rounded-full ${
-                            isSelected ? "bg-[#D8CEB9]" : "bg-[#263D32]"
-                          }`}
-                        />
-                        <span
-                          className={`hidden sm:inline text-[9px] uppercase tracking-wider px-1 ${
+                          className={`text-[8px] sm:text-[9px] uppercase tracking-wider px-1 py-0.5 font-bold ${
                             isSelected
-                              ? "text-[#D8CEB9]"
-                              : "text-[#263D32] font-semibold"
+                              ? "bg-[#D8CEB9] text-[#263D32]"
+                              : "bg-[#263D32] text-[#F2EFE6]"
                           }`}
                         >
-                          Salida
+                          Hoy
                         </span>
-                      </div>
-                    )}
+                      )}
+                    </div>
+
+                    <div className="w-full flex items-center justify-between mt-auto">
+                      <span
+                        className={`w-2 h-2 rounded-full flex-shrink-0 ${
+                          isSelected ? "bg-[#D8CEB9]" : badgeDotColor
+                        }`}
+                      />
+                      <span
+                        className={`hidden sm:inline text-[9px] uppercase tracking-wider truncate pl-1 ${
+                          isSelected
+                            ? "text-[#D8CEB9]"
+                            : isBlocked || isPast
+                            ? "text-[#746657]/70 line-through"
+                            : "font-semibold"
+                        }`}
+                      >
+                        {statusShortLabel}
+                      </span>
+                    </div>
                   </button>
                 );
               })}
             </div>
 
-            {/* Legend */}
-            <div className="mt-6 pt-5 border-t border-[#D8CEB9] flex flex-wrap items-center justify-between gap-4 text-xs text-[#746657]">
-              <div className="flex items-center gap-5">
-                <div className="flex items-center gap-2">
-                  <span className="w-3 h-3 bg-[#65745A]/25 border border-[#65745A] inline-block" />
-                  <span>Fecha con salida programada</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="w-3 h-3 bg-[#F2EFE6] border border-[#D8CEB9] inline-block" />
-                  <span>Disponible para salida a medida</span>
-                </div>
+            {/* Leyenda visible con los 5 estados */}
+            <div className="mt-6 pt-5 border-t border-[#D8CEB9] grid grid-cols-2 sm:grid-cols-3 gap-2.5 text-[11px] text-[#292D29]/85">
+              <div className="flex items-center gap-2">
+                <span className="w-3.5 h-3.5 bg-emerald-800/20 border border-emerald-700 inline-block flex-shrink-0" />
+                <span>Verde: Salida con cupo</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="w-3.5 h-3.5 bg-amber-500/25 border border-amber-600 inline-block flex-shrink-0" />
+                <span>Amarillo: Últimos ≤ 2 cupos</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="w-3.5 h-3.5 bg-red-900/20 border border-red-700 inline-block flex-shrink-0" />
+                <span>Rojo: Completa (Lista de espera)</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="w-3.5 h-3.5 bg-[#E6E2D8] border border-[#D8CEB9] inline-block flex-shrink-0" />
+                <span>Gris: Sin salida (A pedido)</span>
+              </div>
+              <div className="flex items-center gap-2 col-span-2 sm:col-span-2">
+                <span className="w-3.5 h-3.5 bg-[#D8CEB9]/30 border border-[#D8CEB9] inline-flex items-center justify-center text-[9px] line-through text-[#746657] flex-shrink-0">
+                  15
+                </span>
+                <span>Tachado: Día bloqueado o fecha pasada</span>
               </div>
             </div>
           </div>
@@ -300,7 +713,9 @@ export default function CalendarSection({
             <div className="flex items-center justify-between pb-5 mb-6 border-b border-[#899487]/30">
               <div>
                 <span className="text-[10px] uppercase tracking-[0.26em] text-[#D8CEB9] block mb-1">
-                  Ficha de fecha seleccionada
+                  {selectedDateStr === todayAR
+                    ? "Hoy en Patagonia (UTC-3)"
+                    : "Fecha seleccionada"}
                 </span>
                 <h4 className="font-editorial text-2xl sm:text-3xl text-[#F2EFE6]">
                   {selectedDateStr
@@ -311,181 +726,602 @@ export default function CalendarSection({
               <CalendarIcon className="w-6 h-6 text-[#D8CEB9]" />
             </div>
 
-            {selectedDepartures.length > 0 ? (
-              <div className="space-y-6">
-                {selectedDepartures.map((dep) => (
-                  <div
-                    key={dep.id}
-                    className="space-y-5 bg-[#292D29]/45 p-5 border border-[#899487]/30"
-                  >
-                    <div>
-                      <span className="text-[11px] uppercase tracking-[0.2em] text-[#899487] block mb-1">
-                        Destino previsto
-                      </span>
-                      <div className="flex items-center gap-2 text-xl font-editorial text-[#F2EFE6]">
-                        <MapPin className="w-4 h-4 text-[#D8CEB9] flex-shrink-0" />
-                        <span>{dep.destination}</span>
-                      </div>
-                    </div>
+            {/* Confirmación de Anotación Exitosa */}
+            {confirmedEnrollment && (
+              <div className="mb-6 p-5 bg-[#292D29]/80 border border-[#D8CEB9] space-y-3">
+                <div className="flex items-center gap-2 text-[#D8CEB9]">
+                  <CheckCircle2 className="w-5 h-5 flex-shrink-0" />
+                  <span className="text-xs uppercase tracking-[0.2em] font-semibold">
+                    {confirmedEnrollment.enrollment.status === "lista_espera"
+                      ? "¡Quedaste anotado en la lista de espera!"
+                      : "¡Tu anotación está confirmada!"}
+                  </span>
+                </div>
+                <p className="text-xs text-[#F2EFE6]/90 leading-relaxed">
+                  {confirmedEnrollment.enrollment.status === "lista_espera"
+                    ? "Si se libera un lugar en esta salida, el guía te va a contactar de inmediato por WhatsApp o email para confirmar tu ingreso."
+                    : "Tus lugares ya fueron descontados del cupo de la salida y enviamos el resumen a tu correo y al guía."}
+                </p>
+                <div className="p-3.5 bg-[#263D32]/90 border border-[#899487]/30 text-xs space-y-1">
+                  <div>
+                    <strong>Código:</strong>{" "}
+                    {confirmedEnrollment.enrollment.bookingCode}
+                  </div>
+                  <div>
+                    <strong>Salida:</strong>{" "}
+                    {confirmedEnrollment.departure.destination} (
+                    {confirmedEnrollment.departure.experienceType})
+                  </div>
+                  <div>
+                    <strong>Fecha y horario:</strong>{" "}
+                    {confirmedEnrollment.departure.date} ·{" "}
+                    {confirmedEnrollment.departure.startTime}
+                    {confirmedEnrollment.departure.endTime
+                      ? ` a ${confirmedEnrollment.departure.endTime} hs`
+                      : " hs"}
+                  </div>
+                  <div>
+                    <strong>Pescadores:</strong>{" "}
+                    {confirmedEnrollment.enrollment.participantsCount} (
+                    {confirmedEnrollment.enrollment.fullName})
+                  </div>
+                </div>
+              </div>
+            )}
 
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2 border-t border-[#899487]/20">
-                      <div>
-                        <span className="text-[10px] uppercase tracking-[0.2em] text-[#899487] block">
-                          Tipo de experiencia
-                        </span>
-                        <span className="text-sm font-medium text-[#D8CEB9]">
-                          {dep.experienceType}
-                        </span>
-                      </div>
-                      <div>
-                        <span className="text-[10px] uppercase tracking-[0.2em] text-[#899487] block">
-                          Modalidad de servicio
-                        </span>
-                        <span className="text-sm font-medium text-[#F2EFE6]">
-                          {dep.serviceGroupType}
-                        </span>
-                      </div>
-                      <div>
-                        <span className="text-[10px] uppercase tracking-[0.2em] text-[#899487] block">
-                          Capacidad máxima
-                        </span>
-                        <span className="text-sm font-medium text-[#F2EFE6] inline-flex items-center gap-1.5">
-                          <Users className="w-3.5 h-3.5 text-[#D8CEB9]" />
-                          {dep.maxParticipants} participantes
-                        </span>
-                      </div>
-                      <div>
-                        <span className="text-[10px] uppercase tracking-[0.2em] text-[#899487] block">
-                          Cupos libres
-                        </span>
+            {/* Confirmación de Solicitud a Pedido Exitosa */}
+            {confirmedCustomRequest && (
+              <div className="mb-6 p-5 bg-[#292D29]/80 border border-[#D8CEB9] space-y-3">
+                <div className="flex items-center gap-2 text-[#D8CEB9]">
+                  <CheckCircle2 className="w-5 h-5 flex-shrink-0" />
+                  <span className="text-xs uppercase tracking-[0.2em] font-semibold">
+                    Solicitud recibida ({confirmedCustomRequest.request.requestCode})
+                  </span>
+                </div>
+                <p className="text-sm text-[#F2EFE6] font-medium leading-relaxed">
+                  {confirmedCustomRequest.message}
+                </p>
+                <div className="p-3.5 bg-[#263D32]/90 border border-[#899487]/30 text-xs space-y-1 text-[#D8CEB9]">
+                  <div>
+                    <strong>Fecha solicitada:</strong>{" "}
+                    {confirmedCustomRequest.request.desiredDate} (
+                    {confirmedCustomRequest.request.preferredSchedule})
+                  </div>
+                  {confirmedCustomRequest.request.preferredRiver && (
+                    <div>
+                      <strong>Río preferido:</strong>{" "}
+                      {confirmedCustomRequest.request.preferredRiver}
+                    </div>
+                  )}
+                  {confirmedCustomRequest.request.experienceType && (
+                    <div>
+                      <strong>Modalidad preferida:</strong>{" "}
+                      {confirmedCustomRequest.request.experienceType}
+                    </div>
+                  )}
+                  <div>
+                    <strong>Personas:</strong>{" "}
+                    {confirmedCustomRequest.request.participantsCount} ·{" "}
+                    <strong>Contacto:</strong>{" "}
+                    {confirmedCustomRequest.request.whatsapp}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* CASO 1: DÍA BLOQUEADO */}
+            {selectedBlocked ? (
+              <div className="p-6 bg-[#292D29]/60 border border-[#899487]/30 space-y-3">
+                <div className="flex items-center gap-2 text-[#E59872]">
+                  <Ban className="w-5 h-5" />
+                  <span className="text-xs uppercase tracking-[0.2em] font-semibold">
+                    Día bloqueado / No disponible
+                  </span>
+                </div>
+                <p className="text-sm text-[#F2EFE6]/85 font-light leading-relaxed">
+                  Esta fecha no está disponible para salidas programadas ni para
+                  solicitudes a pedido.
+                </p>
+                {selectedBlocked.reason && (
+                  <p className="text-xs text-[#D8CEB9] italic border-l-2 border-[#D8CEB9]/40 pl-3">
+                    Motivo: {selectedBlocked.reason}
+                  </p>
+                )}
+              </div>
+            ) : selectedIsPast ? (
+              /* CASO 2: FECHA PASADA */
+              <div className="p-6 bg-[#292D29]/60 border border-[#899487]/30 space-y-3">
+                <div className="flex items-center gap-2 text-[#D8CEB9]">
+                  <Clock className="w-5 h-5" />
+                  <span className="text-xs uppercase tracking-[0.2em] font-semibold">
+                    Fecha pasada
+                  </span>
+                </div>
+                <p className="text-sm text-[#F2EFE6]/85 font-light leading-relaxed">
+                  Esta fecha ya transcurrió. Seleccioná un día a partir de hoy (
+                  {formatReadableDate(todayAR)}) para anotarte en una salida o
+                  solicitar una fecha a medida.
+                </p>
+              </div>
+            ) : selectedUnfilteredDepartures.length > 0 ? (
+              /* CASO 3: DÍA CON SALIDA(S) PROGRAMADA(S) */
+              <div className="space-y-6">
+                {(selectedDepartures.length > 0
+                  ? selectedDepartures
+                  : selectedUnfilteredDepartures
+                ).map((dep) => {
+                  const isFull = dep.availableSpots <= 0;
+                  const isLow = dep.availableSpots > 0 && dep.availableSpots <= 2;
+                  const isFormOpen = activeEnrollmentDepId === dep.id;
+
+                  return (
+                    <div
+                      key={dep.id}
+                      className="space-y-4 bg-[#292D29]/50 p-5 border border-[#899487]/35"
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <span className="text-[10px] uppercase tracking-[0.2em] text-[#D8CEB9] block mb-1">
+                            Salida Programada
+                          </span>
+                          <div className="flex items-center gap-2 text-xl font-editorial text-[#F2EFE6]">
+                            <MapPin className="w-4 h-4 text-[#D8CEB9] flex-shrink-0" />
+                            <span>{dep.destination}</span>
+                          </div>
+                        </div>
+
                         <span
-                          className={`text-sm font-semibold ${
-                            dep.availableSpots === 0
-                              ? "text-[#E59872]"
-                              : "text-[#D8CEB9]"
+                          className={`px-2.5 py-1 text-[10px] uppercase tracking-wider font-semibold border ${
+                            isFull
+                              ? "bg-red-950/80 text-red-200 border-red-600/50"
+                              : isLow
+                              ? "bg-amber-900/60 text-amber-200 border-amber-500/50"
+                              : "bg-emerald-950/70 text-emerald-200 border-emerald-500/50"
                           }`}
                         >
-                          {dep.availableSpots === 0
-                            ? "Sin cupos libres (Completo)"
-                            : dep.availableSpots !== null
-                            ? `${dep.availableSpots} libre(s) de ${dep.maxParticipants}`
-                            : "A consultar"}
+                          {isFull
+                            ? "Completa · Lista de espera"
+                            : `${dep.availableSpots} de ${dep.maxParticipants} cupos libres`}
                         </span>
                       </div>
-                    </div>
 
-                    <div className="pt-2 border-t border-[#899487]/20 flex items-center justify-between gap-2">
-                      <div>
-                        <span className="text-[10px] uppercase tracking-[0.2em] text-[#899487] block mb-1">
-                          Duración
-                        </span>
-                        <span className="text-xs text-[#F2EFE6]/90 inline-flex items-center gap-1.5">
-                          <Clock className="w-3.5 h-3.5 text-[#D8CEB9]" />
-                          {dep.duration}
-                        </span>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-[#899487]/20 text-xs">
+                        <div>
+                          <span className="text-[10px] uppercase tracking-[0.18em] text-[#899487] block">
+                            Tipo de pesca
+                          </span>
+                          <span className="text-sm font-medium text-[#D8CEB9]">
+                            {dep.experienceType}
+                          </span>
+                        </div>
+                        <div>
+                          <span className="text-[10px] uppercase tracking-[0.18em] text-[#899487] block">
+                            Horario
+                          </span>
+                          <span className="text-sm font-medium text-[#F2EFE6] inline-flex items-center gap-1.5">
+                            <Clock className="w-3.5 h-3.5 text-[#D8CEB9]" />
+                            {dep.startTime || "08:00"}
+                            {dep.endTime ? ` a ${dep.endTime} hs` : " hs"}
+                          </span>
+                        </div>
+                        <div>
+                          <span className="text-[10px] uppercase tracking-[0.18em] text-[#899487] block">
+                            Cupos totales
+                          </span>
+                          <span className="text-sm font-medium text-[#F2EFE6] inline-flex items-center gap-1.5">
+                            <Users className="w-3.5 h-3.5 text-[#D8CEB9]" />
+                            {dep.maxParticipants} personas máx.
+                          </span>
+                        </div>
+                        <div>
+                          <span className="text-[10px] uppercase tracking-[0.18em] text-[#899487] block">
+                            Disponibilidad actual
+                          </span>
+                          <span
+                            className={`text-sm font-semibold ${
+                              isFull ? "text-[#E59872]" : "text-[#D8CEB9]"
+                            }`}
+                          >
+                            {isFull
+                              ? "0 cupos (Podés sumarte a lista de espera)"
+                              : `${dep.availableSpots} lugar(es) disponible(s)`}
+                          </span>
+                        </div>
                       </div>
-                      <span className="px-2.5 py-1 bg-[#D8CEB9]/15 border border-[#D8CEB9]/35 text-[10px] uppercase tracking-[0.18em] text-[#D8CEB9] font-semibold">
-                        Reserva con seña
+
+                      {dep.additionalInfo && (
+                        <div className="pt-2 border-t border-[#899487]/20">
+                          <span className="text-[10px] uppercase tracking-[0.18em] text-[#899487] block mb-1">
+                            Notas del guía
+                          </span>
+                          <p className="text-xs text-[#F2EFE6]/85 font-light leading-relaxed">
+                            {dep.additionalInfo}
+                          </p>
+                        </div>
+                      )}
+
+                      {!isFormOpen ? (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setActiveEnrollmentDepId(dep.id);
+                            setEnrollCount(1);
+                            setEnrollError("");
+                            setWaitlistPrompt(null);
+                            setConfirmedEnrollment(null);
+                          }}
+                          className="w-full py-3.5 px-5 bg-[#D8CEB9] text-[#263D32] hover:bg-[#F2EFE6] text-xs uppercase tracking-[0.2em] font-semibold transition-colors flex items-center justify-center gap-2 cursor-pointer"
+                        >
+                          <Compass className="w-4 h-4" />
+                          <span>
+                            {isFull
+                              ? "Anotarme en lista de espera"
+                              : "Anotarme"}
+                          </span>
+                        </button>
+                      ) : (
+                        <div className="pt-4 border-t border-[#D8CEB9]/40 space-y-3.5">
+                          <div className="flex items-center justify-between">
+                            <span className="text-xs uppercase tracking-[0.2em] text-[#D8CEB9] font-semibold">
+                              {isFull
+                                ? "Formulario de Lista de Espera"
+                                : "Formulario de Anotación"}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setActiveEnrollmentDepId(null);
+                                setWaitlistPrompt(null);
+                                setEnrollError("");
+                              }}
+                              className="text-[11px] text-[#D8CEB9] underline cursor-pointer"
+                            >
+                              Cerrar
+                            </button>
+                          </div>
+
+                          {/* Honeypot anti-spam oculto */}
+                          <input
+                            type="text"
+                            name="website_hp"
+                            value={enrollHoneypot}
+                            onChange={(e) => setEnrollHoneypot(e.target.value)}
+                            className="hidden"
+                            tabIndex={-1}
+                            autoComplete="off"
+                          />
+
+                          <div>
+                            <label className="block text-[10px] uppercase tracking-[0.18em] text-[#D8CEB9] mb-1">
+                              Nombre y apellido *
+                            </label>
+                            <input
+                              type="text"
+                              required
+                              value={enrollName}
+                              onChange={(e) => setEnrollName(e.target.value)}
+                              placeholder="Ej. Martín Gómez"
+                              className="w-full px-3 py-2 bg-[#263D32] border border-[#899487]/50 text-xs text-[#F2EFE6] focus:outline-none focus:border-[#D8CEB9]"
+                            />
+                          </div>
+
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            <div>
+                              <label className="block text-[10px] uppercase tracking-[0.18em] text-[#D8CEB9] mb-1">
+                                Teléfono / WhatsApp *
+                              </label>
+                              <input
+                                type="tel"
+                                required
+                                value={enrollPhone}
+                                onChange={(e) => setEnrollPhone(e.target.value)}
+                                placeholder="+54 9 299 ..."
+                                className="w-full px-3 py-2 bg-[#263D32] border border-[#899487]/50 text-xs text-[#F2EFE6] focus:outline-none focus:border-[#D8CEB9]"
+                              />
+                            </div>
+                            <div>
+                              <label className="block text-[10px] uppercase tracking-[0.18em] text-[#D8CEB9] mb-1">
+                                Email *
+                              </label>
+                              <input
+                                type="email"
+                                required
+                                value={enrollEmail}
+                                onChange={(e) => setEnrollEmail(e.target.value)}
+                                placeholder="tu@email.com"
+                                className="w-full px-3 py-2 bg-[#263D32] border border-[#899487]/50 text-xs text-[#F2EFE6] focus:outline-none focus:border-[#D8CEB9]"
+                              />
+                            </div>
+                          </div>
+
+                          <div>
+                            <label className="block text-[10px] uppercase tracking-[0.18em] text-[#D8CEB9] mb-1">
+                              Cantidad de personas *
+                            </label>
+                            <select
+                              value={enrollCount}
+                              onChange={(e) => {
+                                setEnrollCount(Number(e.target.value));
+                                setWaitlistPrompt(null);
+                              }}
+                              className="w-full px-3 py-2 bg-[#263D32] border border-[#899487]/50 text-xs text-[#F2EFE6] focus:outline-none focus:border-[#D8CEB9]"
+                            >
+                              {[1, 2, 3, 4, 5, 6].map((n) => (
+                                <option key={n} value={n}>
+                                  {n} {n === 1 ? "persona" : "personas"}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+
+                          <div>
+                            <label className="block text-[10px] uppercase tracking-[0.18em] text-[#D8CEB9] mb-1">
+                              Comentarios (Opcional)
+                            </label>
+                            <textarea
+                              rows={2}
+                              value={enrollComments}
+                              onChange={(e) =>
+                                setEnrollComments(e.target.value)
+                              }
+                              placeholder="Nivel de experiencia, equipo o consultas..."
+                              className="w-full px-3 py-2 bg-[#263D32] border border-[#899487]/50 text-xs text-[#F2EFE6] focus:outline-none focus:border-[#D8CEB9]"
+                            />
+                          </div>
+
+                          {enrollError && (
+                            <div className="p-3 bg-red-950/80 border border-red-500/60 text-xs text-red-100 flex items-start gap-2">
+                              <AlertCircle className="w-4 h-4 text-red-300 flex-shrink-0 mt-0.5" />
+                              <span>{enrollError}</span>
+                            </div>
+                          )}
+
+                          {waitlistPrompt ? (
+                            <button
+                              type="button"
+                              disabled={enrollSubmitting}
+                              onClick={() => submitEnrollment(dep, true)}
+                              className="w-full py-3.5 px-4 bg-amber-500 hover:bg-amber-400 text-[#292D29] text-xs uppercase tracking-[0.18em] font-bold transition-colors cursor-pointer"
+                            >
+                              {enrollSubmitting
+                                ? "Procesando..."
+                                : "Confirmar ingreso en Lista de Espera"}
+                            </button>
+                          ) : (
+                            <button
+                              type="button"
+                              disabled={enrollSubmitting}
+                              onClick={() =>
+                                submitEnrollment(
+                                  dep,
+                                  isFull || enrollCount > dep.availableSpots
+                                )
+                              }
+                              className="w-full py-3.5 px-4 bg-[#D8CEB9] hover:bg-[#F2EFE6] text-[#263D32] text-xs uppercase tracking-[0.2em] font-semibold transition-colors cursor-pointer"
+                            >
+                              {enrollSubmitting
+                                ? "Registrando anotación..."
+                                : isFull || enrollCount > dep.availableSpots
+                                ? "Anotarme en Lista de Espera"
+                                : "Confirmar Anotación"}
+                            </button>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              /* CASO 4: DÍA SIN SALIDA PROGRAMADA -> SOLICITUD DE SALIDA A PEDIDO */
+              <div className="space-y-5">
+                <div className="p-5 bg-[#292D29]/50 border border-[#899487]/30 space-y-3">
+                  <span className="inline-block px-2.5 py-1 bg-[#65745A]/40 text-[#D8CEB9] text-[10px] uppercase tracking-[0.2em] font-semibold">
+                    Salida a pedido · Coordinación directa
+                  </span>
+                  <p className="text-base font-editorial text-[#F2EFE6] leading-snug">
+                    No hay salida programada ese día. ¿Querés solicitar una
+                    salida personalizada?
+                  </p>
+                  <p className="text-xs text-[#F2EFE6]/80 font-light leading-relaxed">
+                    Elegí tu horario preferido, río o modalidad opcional y
+                    envianos tu propuesta. El guía la revisa y lo arreglan
+                    directo entre ustedes, sin seña ni pagos por la web.
+                  </p>
+                </div>
+
+                {!showCustomRequestForm ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowCustomRequestForm(true);
+                      setConfirmedCustomRequest(null);
+                      setReqError("");
+                    }}
+                    className="w-full py-4 px-5 bg-[#D8CEB9] text-[#263D32] hover:bg-[#F2EFE6] text-xs uppercase tracking-[0.22em] font-semibold transition-colors flex items-center justify-center gap-2 cursor-pointer"
+                  >
+                    <Compass className="w-4 h-4" />
+                    <span>Solicitar salida personalizada</span>
+                  </button>
+                ) : (
+                  <form
+                    onSubmit={submitCustomRequest}
+                    className="p-5 bg-[#292D29]/65 border border-[#D8CEB9]/40 space-y-4"
+                  >
+                    <div className="flex items-center justify-between border-b border-[#899487]/30 pb-2.5">
+                      <span className="text-xs uppercase tracking-[0.2em] text-[#D8CEB9] font-semibold">
+                        Solicitar Salida a Pedido ({selectedDateStr})
                       </span>
+                      <button
+                        type="button"
+                        onClick={() => setShowCustomRequestForm(false)}
+                        className="text-[11px] text-[#D8CEB9] underline cursor-pointer"
+                      >
+                        Cancelar
+                      </button>
                     </div>
 
-                    {dep.additionalInfo && (
-                      <div className="pt-2 border-t border-[#899487]/20">
-                        <span className="text-[10px] uppercase tracking-[0.2em] text-[#899487] block mb-1">
-                          Información de la jornada
-                        </span>
-                        <p className="text-xs text-[#F2EFE6]/80 font-light leading-relaxed">
-                          {dep.additionalInfo}
-                        </p>
+                    {/* Honeypot anti-spam */}
+                    <input
+                      type="text"
+                      name="website_hp"
+                      value={reqHoneypot}
+                      onChange={(e) => setReqHoneypot(e.target.value)}
+                      className="hidden"
+                      tabIndex={-1}
+                      autoComplete="off"
+                    />
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-[10px] uppercase tracking-[0.18em] text-[#D8CEB9] mb-1">
+                          Horario preferido *
+                        </label>
+                        <select
+                          value={reqSchedule}
+                          onChange={(e) =>
+                            setReqSchedule(
+                              e.target.value as PreferredScheduleType
+                            )
+                          }
+                          className="w-full px-3 py-2 bg-[#263D32] border border-[#899487]/50 text-xs text-[#F2EFE6]"
+                        >
+                          {SCHEDULES.map((s) => (
+                            <option key={s} value={s}>
+                              {s}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-[10px] uppercase tracking-[0.18em] text-[#D8CEB9] mb-1">
+                          Cantidad de personas *
+                        </label>
+                        <select
+                          value={reqCount}
+                          onChange={(e) => setReqCount(Number(e.target.value))}
+                          className="w-full px-3 py-2 bg-[#263D32] border border-[#899487]/50 text-xs text-[#F2EFE6]"
+                        >
+                          {[1, 2, 3, 4, 5, 6, 7, 8].map((n) => (
+                            <option key={n} value={n}>
+                              {n} {n === 1 ? "persona" : "personas"}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-[10px] uppercase tracking-[0.18em] text-[#D8CEB9] mb-1">
+                          Río preferido (Opcional)
+                        </label>
+                        <select
+                          value={reqRiver}
+                          onChange={(e) => setReqRiver(e.target.value)}
+                          className="w-full px-3 py-2 bg-[#263D32] border border-[#899487]/50 text-xs text-[#F2EFE6]"
+                        >
+                          <option value="">A recomendar por el guía</option>
+                          {riverOptions.map((r) => (
+                            <option key={r} value={r}>
+                              {r}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-[10px] uppercase tracking-[0.18em] text-[#D8CEB9] mb-1">
+                          Tipo de pesca (Opcional)
+                        </label>
+                        <select
+                          value={reqType}
+                          onChange={(e) => setReqType(e.target.value)}
+                          className="w-full px-3 py-2 bg-[#263D32] border border-[#899487]/50 text-xs text-[#F2EFE6]"
+                        >
+                          <option value="">A definir con el guía</option>
+                          {FISHING_TYPES.map((t) => (
+                            <option key={t} value={t}>
+                              {t}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-[10px] uppercase tracking-[0.18em] text-[#D8CEB9] mb-1">
+                        Nombre y apellido *
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        value={reqName}
+                        onChange={(e) => setReqName(e.target.value)}
+                        placeholder="Tu nombre completo"
+                        className="w-full px-3 py-2 bg-[#263D32] border border-[#899487]/50 text-xs text-[#F2EFE6]"
+                      />
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-[10px] uppercase tracking-[0.18em] text-[#D8CEB9] mb-1">
+                          Teléfono / WhatsApp *
+                        </label>
+                        <input
+                          type="tel"
+                          required
+                          value={reqPhone}
+                          onChange={(e) => setReqPhone(e.target.value)}
+                          placeholder="+54 9 299 ..."
+                          className="w-full px-3 py-2 bg-[#263D32] border border-[#899487]/50 text-xs text-[#F2EFE6]"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[10px] uppercase tracking-[0.18em] text-[#D8CEB9] mb-1">
+                          Email *
+                        </label>
+                        <input
+                          type="email"
+                          required
+                          value={reqEmail}
+                          onChange={(e) => setReqEmail(e.target.value)}
+                          placeholder="tu@email.com"
+                          className="w-full px-3 py-2 bg-[#263D32] border border-[#899487]/50 text-xs text-[#F2EFE6]"
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-[10px] uppercase tracking-[0.18em] text-[#D8CEB9] mb-1">
+                        Mensaje para el guía
+                      </label>
+                      <textarea
+                        rows={3}
+                        value={reqMessage}
+                        onChange={(e) => setReqMessage(e.target.value)}
+                        placeholder="Contanos qué tenés en mente, experiencia del grupo o cualquier consulta..."
+                        className="w-full px-3 py-2 bg-[#263D32] border border-[#899487]/50 text-xs text-[#F2EFE6]"
+                      />
+                    </div>
+
+                    {reqError && (
+                      <div className="p-3 bg-red-950/80 border border-red-500/60 text-xs text-red-100 flex items-start gap-2">
+                        <AlertCircle className="w-4 h-4 text-red-300 flex-shrink-0 mt-0.5" />
+                        <span>{reqError}</span>
                       </div>
                     )}
 
                     <button
-                      type="button"
-                      disabled={dep.availableSpots === 0}
-                      onClick={() =>
-                        onRequestBookingFromCalendar({
-                          date: dep.date,
-                          departureId: dep.id,
-                          requiresDeposit: true,
-                          availableSpots:
-                            dep.availableSpots !== null
-                              ? dep.availableSpots
-                              : dep.maxParticipants,
-                          maxParticipants: dep.maxParticipants,
-                          experienceType: dep.experienceType,
-                          serviceGroupType: dep.serviceGroupType,
-                          destination: dep.destination,
-                          priceReference: dep.priceLabel,
-                          paymentLink: dep.paymentLink,
-                        })
-                      }
-                      className={`w-full py-3.5 px-5 text-xs uppercase tracking-[0.2em] font-semibold transition-colors flex items-center justify-center gap-2 ${
-                        dep.availableSpots === 0
-                          ? "bg-[#292D29] text-[#899487] border border-[#899487]/30 cursor-not-allowed"
-                          : "bg-[#D8CEB9] text-[#263D32] hover:bg-[#F2EFE6] cursor-pointer"
-                      }`}
+                      type="submit"
+                      disabled={reqSubmitting}
+                      className="w-full py-3.5 px-5 bg-[#D8CEB9] hover:bg-[#F2EFE6] text-[#263D32] text-xs uppercase tracking-[0.2em] font-semibold transition-colors cursor-pointer"
                     >
-                      <Compass className="w-4 h-4" />
-                      <span>
-                        {dep.availableSpots === 0
-                          ? "Salida completa — Sin cupos libres"
-                          : "Contratar cupo en esta salida (Con seña)"}
-                      </span>
+                      {reqSubmitting
+                        ? "Enviando solicitud..."
+                        : "Enviar solicitud personalizada"}
                     </button>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className="space-y-6">
-                <div className="p-5 bg-[#292D29]/40 border border-[#899487]/25 space-y-3">
-                  <span className="inline-block px-2.5 py-1 bg-[#65745A]/40 text-[#D8CEB9] text-[10px] uppercase tracking-[0.2em]">
-                    Día libre · Solicitud sin seña previa
-                  </span>
-                  <p className="text-sm text-[#F2EFE6]/85 font-light leading-relaxed">
-                    Al pedir reservar un día sin evento precargado{" "}
-                    <strong className="font-medium text-[#D8CEB9]">
-                      no se abona seña en este momento
-                    </strong>
-                    , ya que primero verificamos si ese día es posible realizar
-                    la salida y te confirmamos por correo.
-                  </p>
-                </div>
-
-                <div className="space-y-2 text-xs text-[#F2EFE6]/75">
-                  <div className="flex items-center justify-between py-2 border-b border-[#899487]/20">
-                    <span>Tipo de experiencia:</span>
-                    <span className="text-[#D8CEB9]">
-                      Vadeo · Balsa · Personalizada
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between py-2 border-b border-[#899487]/20">
-                    <span>Formato admitido:</span>
-                    <span className="text-[#D8CEB9]">
-                      Individual, 2 personas o Grupal
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between py-2 border-b border-[#899487]/20">
-                    <span>Seña al consultar el día:</span>
-                    <span className="text-[#D8CEB9] font-semibold">
-                      Sin seña (sujeto a confirmación)
-                    </span>
-                  </div>
-                </div>
-
-                <button
-                  type="button"
-                  onClick={() =>
-                    onRequestBookingFromCalendar({
-                      date: selectedDateStr,
-                      requiresDeposit: false,
-                    })
-                  }
-                  className="w-full py-4 px-5 bg-[#D8CEB9] text-[#263D32] hover:bg-[#F2EFE6] text-xs uppercase tracking-[0.22em] font-semibold transition-colors flex items-center justify-center gap-2 cursor-pointer"
-                >
-                  <Compass className="w-4 h-4" />
-                  <span>Pedir reservar este día (Sin seña)</span>
-                </button>
+                  </form>
+                )}
               </div>
             )}
           </div>
