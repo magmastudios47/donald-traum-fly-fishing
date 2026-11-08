@@ -15,6 +15,7 @@ import {
   sendGuideResponseToRequestEmail,
   sendRegretNotificationEmail,
   sendTestDiagnosticEmail,
+  verifyDirectSmtpConnection,
 } from "@/lib/email-service";
 import {
   BlockedDay,
@@ -1425,26 +1426,72 @@ export async function POST(request: NextRequest) {
     }
 
     // =========================================================================
-    // K) ENVIAR MAIL DE PRUEBA Y DIAGNÓSTICO (SEND_TEST_EMAIL)
+    // K) GUARDAR Y VERIFICAR CONEXIÓN DIRECTA DE CORREO + ENVIAR MAIL DE PRUEBA
     // =========================================================================
+    if (actionType === "SAVE_AND_VERIFY_EMAIL_SETTINGS") {
+      const current = await getTraumStore();
+      const nextNotificationEmail =
+        payload.notificationEmail !== undefined
+          ? String(payload.notificationEmail).trim()
+          : current.settings.notificationEmail;
+      const nextSmtpUser =
+        payload.smtpUser !== undefined
+          ? String(payload.smtpUser).trim()
+          : current.settings.smtpUser;
+      const nextSmtpPass =
+        payload.smtpAppPassword !== undefined
+          ? String(payload.smtpAppPassword).trim()
+          : current.settings.smtpAppPassword;
+
+      const updatedSettings = {
+        ...current.settings,
+        notificationEmail: nextNotificationEmail,
+        email: nextNotificationEmail || current.settings.email,
+        smtpUser: nextSmtpUser,
+        smtpAppPassword: nextSmtpPass,
+        resendApiKey: "",
+        web3FormsAccessKey: "",
+      };
+
+      const savedStore = await saveTraumStore({
+        ...current,
+        settings: updatedSettings,
+      });
+
+      const verifyRes = await verifyDirectSmtpConnection(updatedSettings);
+
+      return NextResponse.json({
+        ok: true,
+        verified: verifyRes.ok,
+        senderEmail: verifyRes.senderEmail,
+        errorDetails: verifyRes.error,
+        store: savedStore,
+      });
+    }
+
     if (actionType === "SEND_TEST_EMAIL") {
       const current = await getTraumStore();
       const customRecipient = payload.recipientEmail
         ? String(payload.recipientEmail).trim()
         : undefined;
 
-      // Si mandan credenciales temporales para probar antes de guardar
+      const nextNotificationEmail =
+        payload.notificationEmail !== undefined
+          ? String(payload.notificationEmail).trim()
+          : current.settings.notificationEmail;
+
       const tempSettings = {
         ...current.settings,
+        notificationEmail: nextNotificationEmail,
+        email: nextNotificationEmail || current.settings.email,
         ...(payload.smtpUser !== undefined
-          ? { smtpUser: String(payload.smtpUser) }
+          ? { smtpUser: String(payload.smtpUser).trim() }
           : {}),
         ...(payload.smtpAppPassword !== undefined
-          ? { smtpAppPassword: String(payload.smtpAppPassword) }
+          ? { smtpAppPassword: String(payload.smtpAppPassword).trim() }
           : {}),
-        ...(payload.resendApiKey !== undefined
-          ? { resendApiKey: String(payload.resendApiKey) }
-          : {}),
+        resendApiKey: "",
+        web3FormsAccessKey: "",
       };
 
       const emailRes = await sendTestDiagnosticEmail(

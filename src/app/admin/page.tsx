@@ -770,8 +770,46 @@ export default function AdminDashboardPage() {
   };
 
   // =========================================================================
-  // ENVIAR MAIL DE PRUEBA
+  // GUARDAR Y VERIFICAR CORREO DIRECTO / ENVIAR MAIL DE PRUEBA
   // =========================================================================
+  const handleSaveAndVerifyEmailSettings = async () => {
+    if (!store) return;
+    setTestingEmail(true);
+    setTestEmailResult(null);
+    try {
+      const res = await fetch("/api/traum", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          type: "SAVE_AND_VERIFY_EMAIL_SETTINGS",
+          notificationEmail: store.settings.notificationEmail,
+          smtpUser: store.settings.smtpUser,
+          smtpAppPassword: store.settings.smtpAppPassword,
+        }),
+      });
+      const data = await res.json();
+      if (data.store) setStore(data.store);
+      setTestEmailResult({
+        sent: Boolean(data.verified),
+        channel: data.senderEmail || "directo_gmail",
+        errorDetails: data.errorDetails ? String(data.errorDetails) : undefined,
+      });
+      if (data.verified) {
+        showToast("Configuración guardada y conexión con Gmail verificada.", "ok");
+      } else {
+        showToast(
+          data.errorDetails ||
+            "Se guardó el correo, pero falta verificar la clave de 16 letras del emisor.",
+          "err"
+        );
+      }
+    } catch {
+      showToast("Error al guardar y verificar el correo.", "err");
+    } finally {
+      setTestingEmail(false);
+    }
+  };
+
   const handleSendTestEmail = async () => {
     if (!store) return;
     setTestingEmail(true);
@@ -786,9 +824,9 @@ export default function AdminDashboardPage() {
             testEmailRecipient.trim() ||
             store.settings.notificationEmail ||
             store.settings.email,
+          notificationEmail: store.settings.notificationEmail,
           smtpUser: store.settings.smtpUser,
           smtpAppPassword: store.settings.smtpAppPassword,
-          resendApiKey: store.settings.resendApiKey,
         }),
       });
       const data = await res.json();
@@ -800,12 +838,13 @@ export default function AdminDashboardPage() {
       });
       if (data.sent) {
         showToast(
-          `Correo de prueba enviado con éxito (${data.channel}). Revisá la bandeja de entrada.`,
+          "Correo de prueba enviado de forma directa. Revisá la bandeja de entrada.",
           "ok"
         );
       } else {
         showToast(
-          "No se pudo entregar el correo de prueba. Revisá el detalle debajo para cargar tu clave de correo.",
+          data.errorDetails ||
+            "No se pudo enviar el correo de prueba. Revisá el emisor y su clave de 16 letras.",
           "err"
         );
       }
@@ -2218,164 +2257,161 @@ export default function AdminDashboardPage() {
         {/* ================================================================= */}
         {activeTab === "ajustes" && (
           <div className="space-y-6">
-            {/* BLOQUE 1: CONFIGURACIÓN Y PRUEBA DE CORREO ELECTRÓNICO */}
+            {/* BLOQUE 1: CONFIGURACIÓN DIRECTA DE CORREO ELECTRÓNICO */}
             <div className="bg-white border border-[#D8CEB9] p-4 sm:p-6 shadow-sm space-y-5">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-[#D8CEB9] pb-4">
                 <div>
                   <h2 className="font-serif text-2xl sm:text-3xl text-[#263D32] flex items-center gap-2">
                     <Mail className="w-6 h-6 text-[#65745A]" />
-                    <span>Envío de Correos con Estética TRAUM</span>
+                    <span>Correo de Turnos y Confirmaciones</span>
                   </h2>
                   <p className="text-xs sm:text-sm text-[#746657] mt-0.5">
-                    Cuando alguien solicita una salida o se anota, el sistema
-                    envía un correo al guía y un correo de confirmación al
-                    cliente.
+                    Cuando sacan un turno: a tu mail de abajo te llega{" "}
+                    <strong>solo el mail del turno</strong>, y al cliente le
+                    llega <strong>solo su confirmación</strong> a la cuenta que
+                    puso en el pedido.
                   </p>
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {/* CASILLA RECEPTORA DEL GUÍA */}
+              <div className="p-4 bg-[#FAF8F3] border border-[#D8CEB9]">
+                <label className="block text-xs font-bold uppercase tracking-wider text-[#263D32] mb-1">
+                  ¿A qué correo querés que te lleguen los turnos? (Guía)
+                </label>
+                <input
+                  type="email"
+                  value={store.settings.notificationEmail || ""}
+                  onChange={(e) =>
+                    setStore({
+                      ...store,
+                      settings: {
+                        ...store.settings,
+                        notificationEmail: e.target.value,
+                        email: e.target.value,
+                      },
+                    })
+                  }
+                  placeholder="Ej: traumflyfishing9@gmail.com"
+                  className="w-full px-3.5 py-2.5 bg-white border border-[#D8CEB9] text-sm"
+                />
+                <span className="text-[11px] text-[#746657] block mt-1">
+                  Podés cambiar este correo cuando quieras. Acá te llega
+                  únicamente la ficha de cada turno nuevo.
+                </span>
+              </div>
+
+              {/* CUENTA EMISORA DIRECTA */}
+              <div className="p-4 bg-[#FAF8F3] border border-[#D8CEB9] space-y-3">
                 <div>
-                  <label className="block text-xs font-bold uppercase tracking-wider text-[#263D32] mb-1">
-                    1.Correo donde recibís los avisos (Guía)
-                  </label>
-                  <input
-                    type="email"
-                    value={store.settings.notificationEmail || ""}
-                    onChange={(e) =>
-                      setStore({
-                        ...store,
-                        settings: {
-                          ...store.settings,
-                          notificationEmail: e.target.value,
-                          email: e.target.value,
-                        },
-                      })
-                    }
-                    placeholder="Ej: traumflyfishing9@gmail.com"
-                    className="w-full px-3.5 py-2.5 bg-[#FAF8F3] border border-[#D8CEB9] text-sm"
-                  />
-                  <span className="text-[11px] text-[#746657] block mt-1">
-                    A este correo llegan las alertas de nuevas reservas y pedidos.
-                  </span>
+                  <h3 className="text-xs font-bold uppercase tracking-wider text-[#263D32]">
+                    Correo Emisor (desde donde salen los mails al guía y al cliente)
+                  </h3>
+                  <p className="text-[11px] text-[#746657]">
+                    El correo Gmail y las 16 letras deben pertenecer a la{" "}
+                    <strong>misma cuenta de Google</strong>. Se configura una
+                    sola vez y nunca más se toca.
+                  </p>
                 </div>
 
-                <div>
-                  <label className="block text-xs font-bold uppercase tracking-wider text-[#263D32] mb-1">
-                    2.Cuenta de Gmail emisora (SMTP)
-                  </label>
-                  <input
-                    type="email"
-                    value={
-                      store.settings.smtpUser ||
-                      store.settings.notificationEmail ||
-                      "azpilicuetaruben@gmail.com"
-                    }
-                    onChange={(e) =>
-                      setStore({
-                        ...store,
-                        settings: {
-                          ...store.settings,
-                          smtpUser: e.target.value.trim(),
-                        },
-                      })
-                    }
-                    placeholder="Ej: azpilicuetaruben@gmail.com"
-                    className="w-full px-3.5 py-2.5 bg-[#FAF8F3] border border-[#D8CEB9] text-sm"
-                  />
-                  <span className="text-[11px] text-[#746657] block mt-1">
-                    El Gmail exacto desde el cual generaste la clave de 16 letras.
-                  </span>
-                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-bold uppercase tracking-wider text-[#263D32] mb-1">
+                      Gmail Emisor
+                    </label>
+                    <input
+                      type="email"
+                      value={store.settings.smtpUser || ""}
+                      onChange={(e) =>
+                        setStore({
+                          ...store,
+                          settings: {
+                            ...store.settings,
+                            smtpUser: e.target.value.trim(),
+                          },
+                        })
+                      }
+                      placeholder="Ej: azpilicuetaruben@gmail.com"
+                      className="w-full px-3.5 py-2.5 bg-white border border-[#D8CEB9] text-sm"
+                    />
+                  </div>
 
-                <div>
-                  <label className="block text-xs font-bold uppercase tracking-wider text-[#263D32] mb-1">
-                    3.Contraseña de Aplicación de Gmail (16 letras)
-                  </label>
-                  <input
-                    type="password"
-                    value={store.settings.smtpAppPassword || ""}
-                    onChange={(e) =>
-                      setStore({
-                        ...store,
-                        settings: {
-                          ...store.settings,
-                          smtpAppPassword: e.target.value,
-                          smtpUser:
-                            store.settings.smtpUser ||
-                            store.settings.notificationEmail ||
-                            "azpilicuetaruben@gmail.com",
-                        },
-                      })
-                    }
-                    placeholder="Ej: abcd efgh ijkl mnop"
-                    className="w-full px-3.5 py-2.5 bg-[#FAF8F3] border border-[#D8CEB9] text-sm"
-                  />
-                  <span className="text-[11px] text-[#746657] block mt-1">
-                    Se genera en tu cuenta de Google &rarr; Seguridad &rarr;
-                    Contraseñas de aplicaciones. Permite enviar correos
-                    directos tanto al guía como al cliente sin Resend.
-                  </span>
+                  <div>
+                    <label className="block text-xs font-bold uppercase tracking-wider text-[#263D32] mb-1">
+                      Clave de Aplicación de ese mismo Gmail (16 letras)
+                    </label>
+                    <input
+                      type="text"
+                      value={store.settings.smtpAppPassword || ""}
+                      onChange={(e) =>
+                        setStore({
+                          ...store,
+                          settings: {
+                            ...store.settings,
+                            smtpAppPassword: e.target.value,
+                          },
+                        })
+                      }
+                      placeholder="Ej: abcd efgh ijkl mnop"
+                      className="w-full px-3.5 py-2.5 bg-white border border-[#D8CEB9] text-sm font-mono"
+                    />
+                  </div>
                 </div>
               </div>
 
-              {/* BOTÓN PARA GUARDAR Y BOTÓN ENVIAR MAIL DE PRUEBA */}
-              <div className="p-4 bg-[#F2EFE6] border border-[#D8CEB9] flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+              {/* BOTONES DE VERIFICACIÓN Y PRUEBA */}
+              <div className="p-4 bg-[#F2EFE6] border border-[#D8CEB9] flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3">
+                <button
+                  type="button"
+                  disabled={testingEmail || busyAction}
+                  onClick={handleSaveAndVerifyEmailSettings}
+                  className="px-5 py-2.5 bg-[#263D32] hover:bg-[#3A4E3C] text-white text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-2 cursor-pointer"
+                >
+                  <Save className="w-4 h-4" />
+                  <span>
+                    {testingEmail
+                      ? "Verificando..."
+                      : "Guardar y Verificar Correo"}
+                  </span>
+                </button>
+
                 <div className="flex-1 flex flex-col sm:flex-row sm:items-center gap-2">
                   <input
                     type="email"
                     value={testEmailRecipient}
                     onChange={(e) => setTestEmailRecipient(e.target.value)}
-                    placeholder="Destinatario del mail de prueba"
+                    placeholder="Probar envío a un correo (opcional)"
                     className="px-3.5 py-2.5 bg-white border border-[#D8CEB9] text-xs sm:text-sm flex-1"
                   />
                   <button
                     type="button"
                     disabled={testingEmail}
                     onClick={handleSendTestEmail}
-                    className="px-4 py-2.5 bg-[#263D32] hover:bg-[#3A4E3C] text-white text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-2 cursor-pointer"
+                    className="px-4 py-2.5 bg-[#D8CEB9] hover:bg-[#c8bda5] text-[#263D32] text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-2 cursor-pointer"
                   >
                     <Send className="w-4 h-4" />
-                    <span>
-                      {testingEmail
-                        ? "Enviando prueba..."
-                        : "Enviar mail de prueba"}
-                    </span>
+                    <span>Enviar mail de prueba</span>
                   </button>
                 </div>
-
-                <button
-                  type="button"
-                  disabled={busyAction}
-                  onClick={() =>
-                    handleSaveFullStore(
-                      "Configuración de correo y contacto guardada."
-                    )
-                  }
-                  className="px-4 py-2.5 bg-[#D8CEB9] hover:bg-[#c8bda5] text-[#263D32] text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-1.5 cursor-pointer"
-                >
-                  <Save className="w-4 h-4" />
-                  <span>Guardar ajustes</span>
-                </button>
               </div>
 
-              {/* Resultado inmediato del mail de prueba */}
+              {/* Resultado inmediato */}
               {testEmailResult && (
                 <div
                   className={`p-4 border text-xs sm:text-sm ${
                     testEmailResult.sent
                       ? "bg-emerald-50 border-emerald-400 text-emerald-950"
-                      : "bg-amber-50 border-amber-400 text-amber-950"
+                      : "bg-red-50 border-red-400 text-red-950"
                   }`}
                 >
                   <p className="font-bold">
                     {testEmailResult.sent
-                      ? `¡Correo de prueba enviado correctamente por ${testEmailResult.channel}!`
-                      : "Atención: Falta activar la Contraseña de Aplicación de Gmail para el envío directo."}
+                      ? "✅ Conexión directa verificada y funcionando correctamente."
+                      : "❌ No se pudo autenticar el correo emisor."}
                   </p>
                   {testEmailResult.errorDetails && (
-                    <p className="mt-1 text-xs opacity-90">
-                      Detalle técnico: {testEmailResult.errorDetails}
+                    <p className="mt-1 text-xs">
+                      {testEmailResult.errorDetails}
                     </p>
                   )}
                 </div>
@@ -2388,37 +2424,40 @@ export default function AdminDashboardPage() {
                     Últimos envíos registrados ({store.emailLogs?.length})
                   </span>
                   <div className="max-h-48 overflow-y-auto border border-[#D8CEB9] divide-y divide-[#D8CEB9] bg-[#FAF8F3] text-xs">
-                    {(store.emailLogs || []).slice(0, 10).map((log) => (
-                      <div
-                        key={log.id}
-                        className="p-2.5 flex flex-col sm:flex-row sm:items-center justify-between gap-1"
-                      >
-                        <div>
-                          <span
-                            className={`inline-block px-1.5 py-0.5 text-[10px] font-bold uppercase mr-2 ${
-                              log.guideSent || log.clientSent
-                                ? "bg-emerald-700 text-white"
-                                : "bg-amber-600 text-white"
-                            }`}
-                          >
-                            {log.guideSent || log.clientSent
-                              ? "Enviado"
-                              : "Guardado en panel"}
+                    {(store.emailLogs || []).slice(0, 10).map((log) => {
+                      const allSucceeded =
+                        log.guideSent &&
+                        (!log.recipientClient || log.clientSent);
+                      return (
+                        <div
+                          key={log.id}
+                          className="p-2.5 flex flex-col sm:flex-row sm:items-center justify-between gap-1"
+                        >
+                          <div>
+                            <span
+                              className={`inline-block px-1.5 py-0.5 text-[10px] font-bold uppercase mr-2 ${
+                                allSucceeded
+                                  ? "bg-emerald-700 text-white"
+                                  : "bg-red-700 text-white"
+                              }`}
+                            >
+                              {allSucceeded ? "Entregado" : "Error de envío"}
+                            </span>
+                            <strong className="text-[#263D32]">
+                              {log.subject}
+                            </strong>
+                            {log.errorDetails && (
+                              <p className="text-[11px] text-red-900 mt-0.5">
+                                {log.errorDetails}
+                              </p>
+                            )}
+                          </div>
+                          <span className="text-[11px] text-[#746657] whitespace-nowrap">
+                            {new Date(log.createdAt).toLocaleString("es-AR")}
                           </span>
-                          <strong className="text-[#263D32]">
-                            {log.subject}
-                          </strong>
-                          {log.errorDetails && (
-                            <p className="text-[11px] text-amber-900 mt-0.5">
-                              {log.errorDetails}
-                            </p>
-                          )}
                         </div>
-                        <span className="text-[11px] text-[#746657] whitespace-nowrap">
-                          {new Date(log.createdAt).toLocaleString("es-AR")}
-                        </span>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 </div>
               )}
