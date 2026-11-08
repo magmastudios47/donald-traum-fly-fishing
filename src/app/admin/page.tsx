@@ -2234,10 +2234,10 @@ export default function AdminDashboardPage() {
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div>
                   <label className="block text-xs font-bold uppercase tracking-wider text-[#263D32] mb-1">
-                    Correo donde recibís los avisos (Guía)
+                    1.Correo donde recibís los avisos (Guía)
                   </label>
                   <input
                     type="email"
@@ -2252,13 +2252,45 @@ export default function AdminDashboardPage() {
                         },
                       })
                     }
+                    placeholder="Ej: traumflyfishing9@gmail.com"
                     className="w-full px-3.5 py-2.5 bg-[#FAF8F3] border border-[#D8CEB9] text-sm"
                   />
+                  <span className="text-[11px] text-[#746657] block mt-1">
+                    A este correo llegan las alertas de nuevas reservas y pedidos.
+                  </span>
                 </div>
 
                 <div>
                   <label className="block text-xs font-bold uppercase tracking-wider text-[#263D32] mb-1">
-                    Contraseña de Aplicación de Gmail (16 letras)
+                    2.Cuenta de Gmail emisora (SMTP)
+                  </label>
+                  <input
+                    type="email"
+                    value={
+                      store.settings.smtpUser ||
+                      store.settings.notificationEmail ||
+                      "azpilicuetaruben@gmail.com"
+                    }
+                    onChange={(e) =>
+                      setStore({
+                        ...store,
+                        settings: {
+                          ...store.settings,
+                          smtpUser: e.target.value.trim(),
+                        },
+                      })
+                    }
+                    placeholder="Ej: azpilicuetaruben@gmail.com"
+                    className="w-full px-3.5 py-2.5 bg-[#FAF8F3] border border-[#D8CEB9] text-sm"
+                  />
+                  <span className="text-[11px] text-[#746657] block mt-1">
+                    El Gmail exacto desde el cual generaste la clave de 16 letras.
+                  </span>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold uppercase tracking-wider text-[#263D32] mb-1">
+                    3.Contraseña de Aplicación de Gmail (16 letras)
                   </label>
                   <input
                     type="password"
@@ -2272,7 +2304,7 @@ export default function AdminDashboardPage() {
                           smtpUser:
                             store.settings.smtpUser ||
                             store.settings.notificationEmail ||
-                            "traumflyfishing9@gmail.com",
+                            "azpilicuetaruben@gmail.com",
                         },
                       })
                     }
@@ -2282,7 +2314,7 @@ export default function AdminDashboardPage() {
                   <span className="text-[11px] text-[#746657] block mt-1">
                     Se genera en tu cuenta de Google &rarr; Seguridad &rarr;
                     Contraseñas de aplicaciones. Permite enviar correos
-                    directos tanto a vos como al cliente sin bloqueos.
+                    directos tanto al guía como al cliente sin Resend.
                   </span>
                 </div>
               </div>
