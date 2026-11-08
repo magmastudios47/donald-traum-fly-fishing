@@ -2337,11 +2337,18 @@ export default function AdminDashboardPage() {
                   </div>
 
                   <div>
-                    <label className="block text-xs font-bold uppercase tracking-wider text-[#263D32] mb-1">
-                      Clave de Aplicación de ese mismo Gmail (16 letras)
-                    </label>
+                    <div className="flex flex-wrap items-center justify-between gap-2 mb-1">
+                      <label className="block text-xs font-bold uppercase tracking-wider text-[#263D32]">
+                        Clave de Aplicación de ese mismo Gmail (16 letras)
+                      </label>
+                      {store.settings.smtpPasswordConfigured && (
+                        <span className="px-2 py-0.5 bg-emerald-700 text-white text-[10px] font-bold uppercase tracking-wider">
+                          Activa y guardada
+                        </span>
+                      )}
+                    </div>
                     <input
-                      type="text"
+                      type="password"
                       value={store.settings.smtpAppPassword || ""}
                       onChange={(e) =>
                         setStore({
@@ -2352,7 +2359,11 @@ export default function AdminDashboardPage() {
                           },
                         })
                       }
-                      placeholder="Ej: abcd efgh ijkl mnop"
+                      placeholder={
+                        store.settings.smtpPasswordConfigured
+                          ? "Clave guardada en el servidor (dejalo vacío para mantenerla)"
+                          : "Ej: abcd efgh ijkl mnop"
+                      }
                       className="w-full px-3.5 py-2.5 bg-white border border-[#D8CEB9] text-sm font-mono"
                     />
                   </div>

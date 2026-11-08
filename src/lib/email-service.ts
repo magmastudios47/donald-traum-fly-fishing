@@ -686,7 +686,8 @@ export async function sendCustomRequestNotificationEmail(
 export async function sendEnrollmentNotificationEmail(
   enrollment: DepartureEnrollment,
   departure: CalendarDeparture,
-  settings: SiteSettings
+  settings: SiteSettings,
+  options?: { skipGuideCopy?: boolean }
 ): Promise<EmailDeliveryResult> {
   const guideEmail = (
     settings.notificationEmail ||
@@ -754,14 +755,16 @@ export async function sendEnrollmentNotificationEmail(
     settings,
   });
 
-  const guideRes = await dispatchDirectEmail({
-    to: guideEmail,
-    replyTo: clientEmail || guideEmail,
-    subject: guideSubject,
-    html: guideBuilt.html,
-    text: guideBuilt.text,
-    settings,
-  });
+  const guideRes: SingleSendResult = options?.skipGuideCopy
+    ? { sent: true, channel: "omitido_por_guia" }
+    : await dispatchDirectEmail({
+        to: guideEmail,
+        replyTo: clientEmail || guideEmail,
+        subject: guideSubject,
+        html: guideBuilt.html,
+        text: guideBuilt.text,
+        settings,
+      });
 
   // 2) Correo ÚNICAMENTE para el Cliente (a la cuenta que puso en el pedido)
   let clientRes: SingleSendResult = { sent: false, channel: "omitido" };

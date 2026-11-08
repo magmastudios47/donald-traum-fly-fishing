@@ -82,10 +82,32 @@ class BusinessRuleError extends Error {
   }
 }
 
+/**
+ * Nunca expone la Contraseña de Aplicación SMTP al navegador en las respuestas GET/POST/PUT.
+ * Devuelve `smtpPasswordConfigured: true` para que el Panel Admin sepa que ya hay una clave activa.
+ */
+function sanitizeStoreForClient(store: TraumStoreData): TraumStoreData {
+  const hasPass = Boolean(
+    store.settings?.smtpAppPassword?.trim() ||
+      process.env.SMTP_APP_PASSWORD ||
+      process.env.GMAIL_APP_PASSWORD
+  );
+  return {
+    ...store,
+    settings: {
+      ...store.settings,
+      smtpAppPassword: "",
+      smtpPasswordConfigured: hasPass,
+      resendApiKey: "",
+      web3FormsAccessKey: "",
+    },
+  };
+}
+
 export async function GET() {
   await connection();
   const data = await getTraumStore();
-  return NextResponse.json(data, {
+  return NextResponse.json(sanitizeStoreForClient(data), {
     headers: {
       "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
     },
@@ -97,12 +119,21 @@ export async function PUT(request: NextRequest) {
     const body = (await request.json()) as Partial<TraumStoreData>;
     const current = await getTraumStore();
 
+    const incomingPass = body.settings?.smtpAppPassword?.trim();
+    const preservedPass =
+      incomingPass && incomingPass.length > 0
+        ? incomingPass
+        : current.settings.smtpAppPassword;
+
     const updated: TraumStoreData = {
       ...current,
       ...body,
       settings: {
         ...current.settings,
         ...(body.settings || {}),
+        smtpAppPassword: preservedPass,
+        resendApiKey: "",
+        web3FormsAccessKey: "",
       },
       siteImages: {
         ...current.siteImages,
@@ -115,7 +146,7 @@ export async function PUT(request: NextRequest) {
     };
 
     const saved = await saveTraumStore(updated);
-    return NextResponse.json(saved, {
+    return NextResponse.json(sanitizeStoreForClient(saved), {
       headers: {
         "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
       },
@@ -356,7 +387,7 @@ export async function POST(request: NextRequest) {
         clientEmailSent: emailRes.clientSent,
         emailChannel: emailRes.channel,
         emailError: emailRes.errorDetails,
-        store: finalStore,
+        store: sanitizeStoreForClient(finalStore),
       });
     }
 
@@ -512,7 +543,7 @@ export async function POST(request: NextRequest) {
         clientEmailSent: emailRes.clientSent,
         emailChannel: emailRes.channel,
         emailError: emailRes.errorDetails,
-        store: finalStore,
+        store: sanitizeStoreForClient(finalStore),
       });
     }
 
@@ -634,7 +665,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({
         ok: true,
         waitlistAlert: result.waitlistAlert,
-        store: savedStore,
+        store: sanitizeStoreForClient(savedStore),
       });
     }
 
@@ -715,13 +746,14 @@ export async function POST(request: NextRequest) {
       await sendEnrollmentNotificationEmail(
         result.enrollment,
         result.departure,
-        savedStore.settings
+        savedStore.settings,
+        { skipGuideCopy: true }
       );
 
       return NextResponse.json({
         ok: true,
         enrollment: result.enrollment,
-        store: savedStore,
+        store: sanitizeStoreForClient(savedStore),
       });
     }
 
@@ -809,7 +841,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({
         ok: true,
         enrollment: result.enrollment,
-        store: savedStore,
+        store: sanitizeStoreForClient(savedStore),
       });
     }
 
@@ -902,7 +934,7 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({
           ok: true,
           createdDepartures: result.createdDepartures,
-          store: savedStore,
+          store: sanitizeStoreForClient(savedStore),
         });
       }
 
@@ -944,7 +976,7 @@ export async function POST(request: NextRequest) {
           }
         );
 
-        return NextResponse.json({ ok: true, store: savedStore });
+        return NextResponse.json({ ok: true, store: sanitizeStoreForClient(savedStore) });
       }
 
       if (subAction === "CANCEL") {
@@ -1029,7 +1061,7 @@ export async function POST(request: NextRequest) {
           notifiedCount: notifSummary.notifiedCount,
           notifiedRecipients: notifSummary.recipients,
           whatsappLinks,
-          store: savedStore,
+          store: sanitizeStoreForClient(savedStore),
         });
       }
 
@@ -1049,7 +1081,7 @@ export async function POST(request: NextRequest) {
             result: null,
           })
         );
-        return NextResponse.json({ ok: true, store: savedStore });
+        return NextResponse.json({ ok: true, store: sanitizeStoreForClient(savedStore) });
       }
     }
 
@@ -1126,7 +1158,7 @@ export async function POST(request: NextRequest) {
         customRequest: result.customRequest,
         emailSent: emailRes.sent,
         emailError: emailRes.errorDetails,
-        store: finalStore,
+        store: sanitizeStoreForClient(finalStore),
       });
     }
 
@@ -1256,14 +1288,15 @@ export async function POST(request: NextRequest) {
       await sendEnrollmentNotificationEmail(
         result.enrollment,
         result.departure,
-        savedStore.settings
+        savedStore.settings,
+        { skipGuideCopy: true }
       );
 
       return NextResponse.json({
         ok: true,
         departure: result.departure,
         enrollment: result.enrollment,
-        store: savedStore,
+        store: sanitizeStoreForClient(savedStore),
       });
     }
 
@@ -1318,7 +1351,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({
         ok: true,
         blocked: result.blocked,
-        store: savedStore,
+        store: sanitizeStoreForClient(savedStore),
       });
     }
 
@@ -1353,7 +1386,7 @@ export async function POST(request: NextRequest) {
         ok: true,
         deletedCount: 1,
         deletedId: requestId,
-        store: savedStore,
+        store: sanitizeStoreForClient(savedStore),
       });
     }
 
@@ -1421,7 +1454,7 @@ export async function POST(request: NextRequest) {
         ok: true,
         deletedCount: result.deletedCount,
         mode: result.mode,
-        store: savedStore,
+        store: sanitizeStoreForClient(savedStore),
       });
     }
 
@@ -1438,9 +1471,13 @@ export async function POST(request: NextRequest) {
         payload.smtpUser !== undefined
           ? String(payload.smtpUser).trim()
           : current.settings.smtpUser;
-      const nextSmtpPass =
+      const incomingPass =
         payload.smtpAppPassword !== undefined
           ? String(payload.smtpAppPassword).trim()
+          : "";
+      const nextSmtpPass =
+        incomingPass.length > 0
+          ? incomingPass
           : current.settings.smtpAppPassword;
 
       const updatedSettings = {
@@ -1465,7 +1502,7 @@ export async function POST(request: NextRequest) {
         verified: verifyRes.ok,
         senderEmail: verifyRes.senderEmail,
         errorDetails: verifyRes.error,
-        store: savedStore,
+        store: sanitizeStoreForClient(savedStore),
       });
     }
 
@@ -1480,16 +1517,24 @@ export async function POST(request: NextRequest) {
           ? String(payload.notificationEmail).trim()
           : current.settings.notificationEmail;
 
+      const incomingPass =
+        payload.smtpAppPassword !== undefined
+          ? String(payload.smtpAppPassword).trim()
+          : "";
+      const effectivePass =
+        incomingPass.length > 0
+          ? incomingPass
+          : current.settings.smtpAppPassword;
+
       const tempSettings = {
         ...current.settings,
         notificationEmail: nextNotificationEmail,
         email: nextNotificationEmail || current.settings.email,
-        ...(payload.smtpUser !== undefined
+        ...(payload.smtpUser !== undefined &&
+        String(payload.smtpUser).trim().length > 0
           ? { smtpUser: String(payload.smtpUser).trim() }
           : {}),
-        ...(payload.smtpAppPassword !== undefined
-          ? { smtpAppPassword: String(payload.smtpAppPassword).trim() }
-          : {}),
+        smtpAppPassword: effectivePass,
         resendApiKey: "",
         web3FormsAccessKey: "",
       };
@@ -1514,7 +1559,7 @@ export async function POST(request: NextRequest) {
         channel: emailRes.channel,
         errorDetails: emailRes.errorDetails,
         logEntry: emailRes.logEntry,
-        store: savedStore,
+        store: sanitizeStoreForClient(savedStore),
       });
     }
 
@@ -1664,7 +1709,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({
         ok: true,
         ...result,
-        store: savedStore,
+        store: sanitizeStoreForClient(savedStore),
       });
     }
 
@@ -1707,7 +1752,7 @@ export async function POST(request: NextRequest) {
         ...current,
         reviews: [newReview, ...(current.reviews || [])],
       });
-      return NextResponse.json({ ok: true, review: newReview, store: saved });
+      return NextResponse.json({ ok: true, review: newReview, store: sanitizeStoreForClient(saved) });
     }
 
     // =========================================================================
@@ -1806,7 +1851,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({
         ok: true,
         regret: regretItem,
-        store: saved,
+        store: sanitizeStoreForClient(saved),
       });
     }
 

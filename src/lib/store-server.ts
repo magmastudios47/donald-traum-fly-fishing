@@ -208,12 +208,16 @@ function normalizeStore(
   if (!mergedSettings.notificationEmail) {
     mergedSettings.notificationEmail = "traumflyfishing9@gmail.com";
   }
-  if (!mergedSettings.web3FormsAccessKey) {
-    mergedSettings.web3FormsAccessKey = "fa183ece-13f6-4360-8085-ff84ba3ea870";
+  if (!mergedSettings.smtpUser) {
+    mergedSettings.smtpUser = "traumflyfishing9@gmail.com";
   }
-  if (!mergedSettings.resendApiKey && process.env.RESEND_API_KEY) {
-    mergedSettings.resendApiKey = process.env.RESEND_API_KEY;
-  }
+  mergedSettings.web3FormsAccessKey = "";
+  mergedSettings.resendApiKey = "";
+  mergedSettings.smtpPasswordConfigured = Boolean(
+    mergedSettings.smtpAppPassword ||
+      process.env.SMTP_APP_PASSWORD ||
+      process.env.GMAIL_APP_PASSWORD
+  );
 
   const officialById = new Map(
     initialTraumData.destinations.map((d) => [d.id, d])

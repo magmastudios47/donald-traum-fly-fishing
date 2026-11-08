@@ -324,6 +324,7 @@ export interface SiteSettings {
   web3FormsAccessKey?: string;
   smtpUser?: string;
   smtpAppPassword?: string;
+  smtpPasswordConfigured?: boolean;
   resendApiKey?: string;
 }
 

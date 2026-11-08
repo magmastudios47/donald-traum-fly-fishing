@@ -23,7 +23,7 @@ export const initialTraumData: TraumStoreData = {
     legalAddress: "Junín de los Andes (CP 8371), Provincia del Neuquén, República Argentina",
     guideLicenseNumber: "Guía de Pesca Deportiva Habilitado — Reglamento Continental Patagónico",
     googleClientId: "",
-    web3FormsAccessKey: "fa183ece-13f6-4360-8085-ff84ba3ea870",
+    web3FormsAccessKey: "",
     smtpUser: "traumflyfishing9@gmail.com",
     smtpAppPassword: "",
     resendApiKey: "",
