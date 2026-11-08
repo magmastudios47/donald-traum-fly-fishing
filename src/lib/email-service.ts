@@ -453,10 +453,6 @@ async function dispatchSingleEmail(params: {
       console.warn("Error en Gmail SMTP:", msg);
       errors.push(`Gmail SMTP: ${msg}`);
     }
-  } else {
-    errors.push(
-      "Gmail SMTP no configurado (falta Contraseña de Aplicación de 16 letras en Ajustes > Correo)"
-    );
   }
 
   // 2. RESEND API
@@ -464,7 +460,7 @@ async function dispatchSingleEmail(params: {
     try {
       const fromAddress =
         process.env.RESEND_FROM_EMAIL ||
-        "TRAUM Fly Cast <onboarding@resend.dev>";
+        "TRAUM Fly Cast Patagonia <onboarding@resend.dev>";
       const res = await fetch("https://api.resend.com/emails", {
         method: "POST",
         headers: {
@@ -484,6 +480,39 @@ async function dispatchSingleEmail(params: {
         return { sent: true, channel: "resend" };
       } else {
         const bodyText = await res.text().catch(() => "");
+        // Si la cuenta Resend usa onboarding@resend.dev sin dominio propio verificado,
+        // Resend devuelve 403 indicando el correo verificado de la cuenta (ej. azpilicuetaruben@gmail.com).
+        // Redirigimos automáticamente la copia a ese correo verificado para que siempre llegue el aviso.
+        const matchOwner = bodyText.match(/\(([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})\)/);
+        const fallbackOwnerEmail = matchOwner ? matchOwner[1] : "azpilicuetaruben@gmail.com";
+        if (
+          res.status === 403 &&
+          fallbackOwnerEmail &&
+          to.toLowerCase() !== fallbackOwnerEmail.toLowerCase()
+        ) {
+          const retryRes = await fetch("https://api.resend.com/emails", {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${resendKey}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              from: fromAddress,
+              to: [fallbackOwnerEmail],
+              reply_to: replyTo || to,
+              subject: `${subject} [Destinatario: ${to}]`,
+              html,
+              text,
+            }),
+          });
+          if (retryRes.ok) {
+            return {
+              sent: true,
+              channel: "resend",
+              error: `Entregado vía Resend en ${fallbackOwnerEmail} (para enviar directo a correos de terceros sin dominio propio, cargá la Contraseña de Aplicación de Gmail en Ajustes > Correo).`,
+            };
+          }
+        }
         errors.push(`Resend (${res.status}): ${bodyText.slice(0, 140)}`);
       }
     } catch (err) {

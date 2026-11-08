@@ -130,8 +130,9 @@ export default function FishingMapWidget({
       // Base Hub Marker: Junín de los Andes
       const hubIcon = L.divIcon({
         className: "traum-hub-marker",
-        html: `<div style="background:#292D29;color:#D8CEB9;border:2px solid #D8CEB9;padding:4px 9px;font-size:10px;font-weight:700;letter-spacing:0.14em;text-transform:uppercase;white-space:nowrap;box-shadow:0 6px 16px rgba(0,0,0,0.45);transform:translate(-50%,-50%);">★ Junín de los Andes</div>`,
+        html: `<div style="background:#292D29;color:#D8CEB9;border:2px solid #D8CEB9;padding:4px 9px;font-size:10px;font-weight:700;letter-spacing:0.14em;text-transform:uppercase;white-space:nowrap;box-shadow:0 6px 16px rgba(0,0,0,0.45);display:inline-block;">★ Junín de los Andes</div>`,
         iconSize: [148, 26],
+        iconAnchor: [74, 13],
       });
 
       L.marker([JUNIN_CENTER.lat, JUNIN_CENTER.lng], { icon: hubIcon })
@@ -140,18 +141,18 @@ export default function FishingMapWidget({
           `<strong>Junín de los Andes</strong><br/>Centro operativo de TRAUM Fly Cast en la Patagonia.`
         );
 
-      // Destination Markers
+      // Destination Markers — Exact center anchored on the water coordinate
       destinations.forEach((dest) => {
         if (typeof dest.lat !== "number" || typeof dest.lng !== "number") return;
 
         const pinIcon = L.divIcon({
           className: "traum-dest-marker",
-          html: `<div style="display:flex;align-items:center;gap:5px;transform:translate(-14px,-14px);cursor:pointer;">
-            <div style="width:28px;height:28px;border-radius:9999px;background:#263D32;border:2.5px solid #F2EFE6;box-shadow:0 4px 12px rgba(0,0,0,0.45);display:flex;align-items:center;justify-content:center;color:#D8CEB9;font-weight:700;font-size:12px;">●</div>
-            <span style="background:rgba(38,61,50,0.92);color:#F2EFE6;padding:2px 7px;font-size:10px;font-weight:600;letter-spacing:0.08em;white-space:nowrap;border:1px solid rgba(216,206,185,0.4);box-shadow:0 2px 8px rgba(0,0,0,0.3);">${dest.name}</span>
+          html: `<div style="position:relative;width:24px;height:24px;cursor:pointer;">
+            <div style="width:24px;height:24px;border-radius:9999px;background:#263D32;border:2.5px solid #F2EFE6;box-shadow:0 4px 12px rgba(0,0,0,0.55);display:flex;align-items:center;justify-content:center;color:#D8CEB9;font-weight:700;font-size:11px;line-height:1;">●</div>
+            <span style="position:absolute;left:28px;top:50%;transform:translateY(-50%);background:rgba(38,61,50,0.94);color:#F2EFE6;padding:2px 7px;font-size:10px;font-weight:600;letter-spacing:0.08em;white-space:nowrap;border:1px solid rgba(216,206,185,0.45);box-shadow:0 2px 8px rgba(0,0,0,0.35);pointer-events:auto;">${dest.name}</span>
           </div>`,
-          iconSize: [160, 28],
-          iconAnchor: [14, 14],
+          iconSize: [24, 24],
+          iconAnchor: [12, 12],
         });
 
         const marker = L.marker([dest.lat, dest.lng], { icon: pinIcon }).addTo(
@@ -160,7 +161,7 @@ export default function FishingMapWidget({
 
         marker.on("click", () => {
           setSelectedDest(dest);
-          map.flyTo([dest.lat, dest.lng], 11, { duration: 0.9 });
+          map.flyTo([dest.lat, dest.lng], 13, { duration: 0.9 });
         });
       });
     }
@@ -209,7 +210,7 @@ export default function FishingMapWidget({
         mapInstanceRef.current as {
           flyTo: (coords: [number, number], zoom: number, opts: { duration: number }) => void;
         }
-      ).flyTo([dest.lat, dest.lng], 11, { duration: 0.9 });
+      ).flyTo([dest.lat, dest.lng], 13, { duration: 0.9 });
     }
   };
 

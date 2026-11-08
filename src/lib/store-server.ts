@@ -67,68 +67,9 @@ export function recalculateStoreConsistentState(
     availableSpots: Math.max(0, Number(dep.availableSpots ?? dep.maxParticipants) || 0),
   }));
 
-  // Migrar cualquier inquiry previa que no esté en enrollments o customRequests
+  // Fuente única de verdad: enrollments y customRequests (sin re-inyectar desde inquiries borradas)
   const existingEnrollments: DepartureEnrollment[] = [...(store.enrollments || [])];
   const existingRequests: CustomTripRequest[] = [...(store.customRequests || [])];
-
-  const enrollmentIds = new Set(existingEnrollments.map((e) => e.id));
-  const requestIds = new Set(existingRequests.map((r) => r.id));
-
-  for (const inq of store.inquiries || []) {
-    if (inq.departureId) {
-      if (!enrollmentIds.has(inq.id)) {
-        const mappedStatus =
-          inq.enrollmentStatus ||
-          (inq.status === "Cancelado" || inq.spotsReleased
-            ? "cancelada"
-            : "confirmada");
-        existingEnrollments.push({
-          id: inq.id,
-          bookingCode: inq.bookingCode || `TRM-${inq.id.slice(-4)}`,
-          departureId: inq.departureId,
-          fullName: inq.fullName,
-          whatsapp: inq.whatsapp,
-          normalizedPhone: normalizePhoneForComparison(inq.whatsapp),
-          email: inq.email,
-          participantsCount: Math.max(1, Number(inq.participantsCount) || 1),
-          comments: inq.comments || "",
-          status: mappedStatus,
-          createdAt: inq.createdAt,
-        });
-        enrollmentIds.add(inq.id);
-      }
-    } else if (inq.desiredDate && inq.desiredDate !== "A definir") {
-      if (!requestIds.has(inq.id)) {
-        const mappedReqStatus =
-          inq.customRequestStatus ||
-          (inq.status === "Confirmado"
-            ? "aceptada"
-            : inq.status === "Cancelado"
-            ? "rechazada"
-            : "pendiente");
-        existingRequests.push({
-          id: inq.id,
-          requestCode: inq.bookingCode || `SOL-${inq.id.slice(-4)}`,
-          desiredDate: inq.desiredDate,
-          preferredSchedule: inq.preferredSchedule || "Todo el día",
-          preferredRiver: inq.preferredRiver || "",
-          experienceType:
-            (inq.experienceType as CustomTripRequest["experienceType"]) || "",
-          participantsCount: Math.max(1, Number(inq.participantsCount) || 1),
-          fullName: inq.fullName,
-          whatsapp: inq.whatsapp,
-          normalizedPhone: normalizePhoneForComparison(inq.whatsapp),
-          email: inq.email,
-          comments: inq.comments || "",
-          status: mappedReqStatus,
-          alternativeDate: inq.alternativeDate,
-          guideResponse: inq.guideResponse,
-          createdAt: inq.createdAt,
-        });
-        requestIds.add(inq.id);
-      }
-    }
-  }
 
   // Asegurar normalizedPhone en todas las anotaciones
   const normalizedEnrollments: DepartureEnrollment[] = existingEnrollments.map(
@@ -269,6 +210,9 @@ function normalizeStore(
   }
   if (!mergedSettings.web3FormsAccessKey) {
     mergedSettings.web3FormsAccessKey = "fa183ece-13f6-4360-8085-ff84ba3ea870";
+  }
+  if (!mergedSettings.resendApiKey && process.env.RESEND_API_KEY) {
+    mergedSettings.resendApiKey = process.env.RESEND_API_KEY;
   }
 
   const officialById = new Map(

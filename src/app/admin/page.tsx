@@ -1576,21 +1576,23 @@ export default function AdminDashboardPage() {
                                         onClick={() => {
                                           if (
                                             window.confirm(
-                                              `¿Dar de baja a ${enr.fullName} de esta salida y liberar su cupo?`
+                                              `¿Eliminar a ${enr.fullName} de esta salida y liberar su cupo?`
                                             )
                                           ) {
                                             runAdminAction(
                                               {
                                                 type: "CANCEL_ENROLLMENT",
                                                 enrollmentId: enr.id,
+                                                deleteRecord: true,
                                               },
-                                              `Se liberó el cupo de ${enr.fullName}.`
+                                              `Se eliminó la anotación de ${enr.fullName} y se liberó su cupo.`
                                             );
                                           }
                                         }}
-                                        className="px-3 py-1.5 bg-red-50 hover:bg-red-100 text-red-800 border border-red-200 text-xs font-bold uppercase tracking-wider cursor-pointer"
+                                        className="px-3 py-1.5 bg-red-50 hover:bg-red-100 text-red-800 border border-red-200 text-xs font-bold uppercase tracking-wider flex items-center gap-1 cursor-pointer"
                                       >
-                                        Dar de baja
+                                        <Trash2 className="w-3.5 h-3.5" />
+                                        <span>Borrar</span>
                                       </button>
                                     </div>
                                   </div>
@@ -1909,6 +1911,31 @@ export default function AdminDashboardPage() {
                               <span>Pasar al calendario</span>
                             </button>
                           )}
+
+                          <button
+                            type="button"
+                            disabled={busyAction}
+                            onClick={() => {
+                              if (
+                                window.confirm(
+                                  `¿Eliminar definitivamente el pedido de ${req.fullName} (${req.requestCode})?`
+                                )
+                              ) {
+                                runAdminAction(
+                                  {
+                                    type: "DELETE_CUSTOM_REQUEST",
+                                    requestId: req.id,
+                                  },
+                                  `Se eliminó la solicitud de ${req.fullName}.`
+                                );
+                              }
+                            }}
+                            className="px-3.5 py-2.5 bg-stone-100 hover:bg-red-100 text-stone-700 hover:text-red-900 border border-[#D8CEB9] hover:border-red-300 text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 cursor-pointer"
+                            title="Borrar esta solicitud individualmente"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                            <span>Borrar</span>
+                          </button>
                         </div>
                       </div>
 

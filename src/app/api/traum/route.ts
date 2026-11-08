@@ -1322,8 +1322,40 @@ export async function POST(request: NextRequest) {
     }
 
     // =========================================================================
-    // J) LIMPIAR HISTORIAL DE SOLICITUDES (CLEAR_REQUESTS_HISTORY)
+    // J) LIMPIAR HISTORIAL DE SOLICITUDES O BORRAR INDIVIDUALMENTE
     // =========================================================================
+    if (actionType === "DELETE_CUSTOM_REQUEST") {
+      const requestId = String(payload.requestId || "").trim();
+      if (!requestId) {
+        return NextResponse.json(
+          { error: "Indicá la solicitud a eliminar." },
+          { status: 400 }
+        );
+      }
+
+      const { store: savedStore } = await runStoreTransaction(
+        async (current) => ({
+          nextStore: {
+            ...current,
+            customRequests: (current.customRequests || []).filter(
+              (r) => r.id !== requestId
+            ),
+            inquiries: (current.inquiries || []).filter(
+              (inq) => inq.id !== requestId
+            ),
+          },
+          result: { deletedId: requestId },
+        })
+      );
+
+      return NextResponse.json({
+        ok: true,
+        deletedCount: 1,
+        deletedId: requestId,
+        store: savedStore,
+      });
+    }
+
     if (actionType === "CLEAR_REQUESTS_HISTORY") {
       const mode = String(payload.mode || "resolved"); // "resolved" | "all"
       const confirmPending = Boolean(payload.confirmPending);
@@ -1350,10 +1382,14 @@ export async function POST(request: NextRequest) {
                 }
               );
             }
+            const deletedIds = new Set(allRequests.map((r) => r.id));
             return {
               nextStore: {
                 ...current,
                 customRequests: [],
+                inquiries: (current.inquiries || []).filter(
+                  (inq) => !deletedIds.has(inq.id)
+                ),
               },
               result: {
                 deletedCount: allRequests.length,
@@ -1363,10 +1399,14 @@ export async function POST(request: NextRequest) {
           }
 
           // Modo "resolved": borrar solo las ya resueltas (aceptadas, rechazadas, reprogramadas)
+          const resolvedIds = new Set(resolvedRequests.map((r) => r.id));
           return {
             nextStore: {
               ...current,
               customRequests: pendingRequests,
+              inquiries: (current.inquiries || []).filter(
+                (inq) => !resolvedIds.has(inq.id)
+              ),
             },
             result: {
               deletedCount: resolvedRequests.length,
