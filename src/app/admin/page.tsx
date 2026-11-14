@@ -257,10 +257,17 @@ export default function AdminDashboardPage() {
   const [clearMode, setClearMode] = useState<"resolved" | "all">("resolved");
   const [confirmDeletePending, setConfirmDeletePending] = useState(false);
 
-  // Galería de fotos
+  // Galería de fotos e Imágenes Ilustrativas de la web
+  const [imagesSubTab, setImagesSubTab] = useState<"ilustrativas" | "galeria">(
+    "ilustrativas"
+  );
   const [uploadingGallery, setUploadingGallery] = useState(false);
   const [newGalleryCaption, setNewGalleryCaption] = useState("");
   const [editingCaptions, setEditingCaptions] = useState<
+    Record<string, string>
+  >({});
+  const [uploadingSlotKey, setUploadingSlotKey] = useState<string | null>(null);
+  const [illustrativeUrlDrafts, setIllustrativeUrlDrafts] = useState<
     Record<string, string>
   >({});
 
@@ -894,6 +901,43 @@ export default function AdminDashboardPage() {
   };
 
   // =========================================================================
+  // SUBIR O CAMBIAR CUALQUIER IMAGEN ILUSTRATIVA DE LA PÁGINA WEB
+  // =========================================================================
+  const handleIllustrativeFileUpload = async (
+    category: "siteImages" | "experiences" | "destinations",
+    keyOrId: string,
+    label: string,
+    file: File | undefined
+  ) => {
+    if (!file) return;
+    const slotId = `${category}:${keyOrId}`;
+    setUploadingSlotKey(slotId);
+    try {
+      const dataUrl = await optimizeImageFile(file, 1600, 0.84);
+      await runAdminAction(
+        {
+          type: "UPDATE_ILLUSTRATIVE_IMAGE",
+          category,
+          key: keyOrId,
+          itemId: keyOrId,
+          imageUrl: dataUrl,
+        },
+        `Imagen de "${label}" actualizada y optimizada.`
+      );
+      setIllustrativeUrlDrafts((prev) => ({ ...prev, [slotId]: "" }));
+    } catch (err) {
+      showToast(
+        err instanceof Error
+          ? err.message
+          : "No se pudo procesar la imagen seleccionada.",
+        "err"
+      );
+    } finally {
+      setUploadingSlotKey(null);
+    }
+  };
+
+  // =========================================================================
   // GUARDAR Y VERIFICAR CORREO DIRECTO / ENVIAR MAIL DE PRUEBA
   // =========================================================================
   const handleSaveAndVerifyEmailSettings = async () => {
@@ -1258,7 +1302,7 @@ export default function AdminDashboardPage() {
             }`}
           >
             <ImageIcon className="w-4 h-4" />
-            <span>3. Galería ({sortedGallery.length})</span>
+            <span>3. Imágenes y Galería</span>
           </button>
 
           <button
@@ -2216,201 +2260,702 @@ export default function AdminDashboardPage() {
         )}
 
         {/* ================================================================= */}
-        {/* PESTAÑA 3: GALERÍA DE FOTOS (SUBIDA MÚLTIPLE + REORDENAR + BORRAR) */}
+        {/* PESTAÑA 3: IMÁGENES ILUSTRATIVAS DE LA WEB + GALERÍA DE JORNADAS  */}
         {/* ================================================================= */}
         {activeTab === "galeria" && (
-          <div className="bg-white border border-[#D8CEB9] p-4 sm:p-6 shadow-sm space-y-6">
-            <div className="border-b border-[#D8CEB9] pb-4">
-              <h2 className="font-serif text-2xl sm:text-3xl text-[#263D32]">
-                Galería de Fotos de la Página Principal
-              </h2>
-              <p className="text-xs sm:text-sm text-[#746657] mt-0.5">
-                Subí una o varias fotos a la vez. El sistema las redimensiona y
-                optimiza automáticamente para que la web cargue rápido.
-              </p>
+          <div className="space-y-6">
+            {/* Selector entre Imágenes Ilustrativas de las Secciones y Galería de Fotos */}
+            <div className="bg-white border border-[#D8CEB9] p-3 flex flex-col sm:flex-row gap-2">
+              <button
+                type="button"
+                onClick={() => setImagesSubTab("ilustrativas")}
+                className={`flex-1 py-3 px-4 text-xs sm:text-sm font-bold uppercase tracking-wider flex items-center justify-center gap-2 transition-colors cursor-pointer ${
+                  imagesSubTab === "ilustrativas"
+                    ? "bg-[#263D32] text-[#F2EFE6]"
+                    : "bg-[#F2EFE6] text-[#292D29] hover:bg-[#E5DEC9]"
+                }`}
+              >
+                <Sparkles className="w-4 h-4" />
+                <span>
+                  Imágenes Ilustrativas de la Página (Secciones, Experiencias y
+                  Ríos)
+                </span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setImagesSubTab("galeria")}
+                className={`flex-1 py-3 px-4 text-xs sm:text-sm font-bold uppercase tracking-wider flex items-center justify-center gap-2 transition-colors cursor-pointer ${
+                  imagesSubTab === "galeria"
+                    ? "bg-[#263D32] text-[#F2EFE6]"
+                    : "bg-[#F2EFE6] text-[#292D29] hover:bg-[#E5DEC9]"
+                }`}
+              >
+                <ImageIcon className="w-4 h-4" />
+                <span>
+                  Galería de Fotos de Jornadas ({sortedGallery.length})
+                </span>
+              </button>
             </div>
 
-            {/* ZONA DE SUBIDA DE 1 O VARIAS IMÁGENES */}
-            <div
-              onDragOver={(e) => e.preventDefault()}
-              onDrop={(e) => {
-                e.preventDefault();
-                if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-                  handleGalleryFilesSelected(e.dataTransfer.files);
-                }
-              }}
-              className="border-2 border-dashed border-[#65745A] bg-[#F2EFE6]/70 p-6 text-center space-y-4"
-            >
-              <Upload className="w-8 h-8 text-[#263D32] mx-auto" />
-              <div>
-                <p className="text-sm font-bold text-[#263D32]">
-                  Seleccioná una o varias fotos desde tu celular o computadora
-                </p>
-                <p className="text-xs text-[#746657] mt-1">
-                  Formatos aceptados: JPG, PNG, WebP (máx. 15 MB por foto, se
-                  optimizan automáticamente).
-                </p>
-              </div>
-
-              <div className="max-w-md mx-auto">
-                <input
-                  type="text"
-                  value={newGalleryCaption}
-                  onChange={(e) => setNewGalleryCaption(e.target.value)}
-                  placeholder="Epígrafe corto opcional para las fotos a subir (ej: Trucha marrón en el Malleo)"
-                  className="w-full px-3.5 py-2.5 bg-white border border-[#D8CEB9] text-xs sm:text-sm mb-3"
-                />
-
-                <label className="inline-flex items-center justify-center gap-2 px-6 py-3 bg-[#263D32] hover:bg-[#3A4E3C] text-[#F2EFE6] text-xs font-bold uppercase tracking-wider cursor-pointer shadow-sm">
-                  <Upload className="w-4 h-4" />
-                  <span>
-                    {uploadingGallery
-                      ? "Optimizando y subiendo..."
-                      : "Elegir foto(s) para subir"}
-                  </span>
-                  <input
-                    type="file"
-                    accept="image/jpeg,image/png,image/webp"
-                    multiple
-                    disabled={uploadingGallery}
-                    onChange={(e) => {
-                      handleGalleryFilesSelected(e.target.files);
-                      e.target.value = "";
-                    }}
-                    className="hidden"
-                  />
-                </label>
-              </div>
-            </div>
-
-            {/* GRILLA DE FOTOS ACTUALES EN LA GALERÍA */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              {sortedGallery.map((item: GalleryImageItem, index: number) => (
-                <div
-                  key={item.id}
-                  className="border border-[#D8CEB9] bg-[#FAF8F3] overflow-hidden flex flex-col justify-between"
-                >
-                  <div className="relative aspect-[4/3] bg-[#292D29]">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
-                      src={item.imageUrl}
-                      alt={item.caption || `Foto ${index + 1}`}
-                      className="w-full h-full object-cover"
-                    />
-                    <span className="absolute top-2 left-2 px-2.5 py-1 bg-[#263D32]/90 text-white text-[11px] font-bold">
-                      #{index + 1}
-                    </span>
+            {imagesSubTab === "ilustrativas" && (
+              <div className="space-y-6">
+                {/* 1. SECCIONES PRINCIPALES DE LA WEB (siteImages) */}
+                <div className="bg-white border border-[#D8CEB9] p-4 sm:p-6 shadow-sm space-y-5">
+                  <div className="border-b border-[#D8CEB9] pb-3">
+                    <h2 className="font-serif text-2xl sm:text-3xl text-[#263D32]">
+                      1. Imágenes Principales de las Secciones
+                    </h2>
+                    <p className="text-xs sm:text-sm text-[#746657] mt-0.5">
+                      Cambiá cualquiera de las fotos fijas de la portada,
+                      filosofía o pesca responsable subiendo una foto desde tu
+                      celular/PC o pegando un link.
+                    </p>
                   </div>
 
-                  <div className="p-3.5 space-y-3">
-                    <div>
-                      <label className="block text-[10px] uppercase tracking-wider text-[#746657] mb-1">
-                        Epígrafe corto (opcional)
-                      </label>
-                      <div className="flex gap-1.5">
-                        <input
-                          type="text"
-                          value={editingCaptions[item.id] ?? item.caption ?? ""}
-                          onChange={(e) =>
-                            setEditingCaptions((prev) => ({
-                              ...prev,
-                              [item.id]: e.target.value,
-                            }))
-                          }
-                          placeholder="Sin epígrafe..."
-                          className="flex-1 px-2.5 py-1.5 bg-white border border-[#D8CEB9] text-xs"
-                        />
-                        <button
-                          type="button"
-                          onClick={() =>
-                            runAdminAction(
-                              {
-                                type: "MANAGE_GALLERY",
-                                subAction: "UPDATE_CAPTION",
-                                imageId: item.id,
-                                caption: editingCaptions[item.id] ?? "",
-                              },
-                              "Epígrafe guardado."
-                            )
-                          }
-                          className="px-2.5 py-1.5 bg-[#263D32] text-white text-xs font-bold uppercase cursor-pointer"
-                          title="Guardar epígrafe"
-                        >
-                          <Save className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-                    </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {(
+                      [
+                        {
+                          key: "heroBg",
+                          title: "Portada Principal (Hero)",
+                          desc: "Imagen panorámica de fondo al abrir la página",
+                        },
+                        {
+                          key: "philosophyMain",
+                          title: "Filosofía · Foto Principal",
+                          desc: "Foto vertical derecha en 'El significado de Traum'",
+                        },
+                        {
+                          key: "pillarCapture",
+                          title: "Pilar I · El sueño de la captura",
+                          desc: "Primera tarjeta de Los tres sueños del río",
+                        },
+                        {
+                          key: "pillarDisconnect",
+                          title: "Pilar II · El sueño de desconectar",
+                          desc: "Segunda tarjeta de Los tres sueños del río",
+                        },
+                        {
+                          key: "pillarShare",
+                          title: "Pilar III · El sueño de compartir",
+                          desc: "Tercera tarjeta de Los tres sueños del río",
+                        },
+                        {
+                          key: "conservationMain",
+                          title: "Pesca Responsable (Catch & Release)",
+                          desc: "Foto vertical de devolución de trucha al agua",
+                        },
+                        {
+                          key: "thoreauQuoteBg",
+                          title: "Banner Final · Frase Thoreau",
+                          desc: "Fondo panorámico de la cita final antes de Contacto",
+                        },
+                      ] as const
+                    ).map((slot) => {
+                      const slotId = `siteImages:${slot.key}`;
+                      const currentUrl = store.siteImages[slot.key];
+                      const isUploadingThis = uploadingSlotKey === slotId;
+                      const draftUrl = illustrativeUrlDrafts[slotId] ?? "";
 
-                    {/* Botones de 1 clic para cambiar orden o eliminar */}
-                    <div className="flex items-center justify-between gap-2 pt-2 border-t border-[#D8CEB9]">
-                      <div className="flex items-center gap-1">
-                        <button
-                          type="button"
-                          disabled={index === 0 || busyAction}
-                          onClick={() =>
-                            runAdminAction({
-                              type: "MANAGE_GALLERY",
-                              subAction: "REORDER",
-                              imageId: item.id,
-                              direction: "LEFT",
-                            })
-                          }
-                          className="px-2.5 py-1.5 bg-white border border-[#D8CEB9] hover:border-[#263D32] disabled:opacity-40 text-xs font-semibold flex items-center gap-1 cursor-pointer"
-                          title="Mover antes"
+                      return (
+                        <div
+                          key={slot.key}
+                          className="border border-[#D8CEB9] bg-[#FAF8F3] flex flex-col justify-between overflow-hidden"
                         >
-                          <ArrowUp className="w-3.5 h-3.5" />
-                          <span>Subir</span>
-                        </button>
-                        <button
-                          type="button"
-                          disabled={
-                            index === sortedGallery.length - 1 || busyAction
-                          }
-                          onClick={() =>
-                            runAdminAction({
-                              type: "MANAGE_GALLERY",
-                              subAction: "REORDER",
-                              imageId: item.id,
-                              direction: "RIGHT",
-                            })
-                          }
-                          className="px-2.5 py-1.5 bg-white border border-[#D8CEB9] hover:border-[#263D32] disabled:opacity-40 text-xs font-semibold flex items-center gap-1 cursor-pointer"
-                          title="Mover después"
-                        >
-                          <ArrowDown className="w-3.5 h-3.5" />
-                          <span>Bajar</span>
-                        </button>
-                      </div>
+                          <div>
+                            <div className="relative aspect-[16/10] bg-[#292D29]">
+                              {/* eslint-disable-next-line @next/next/no-img-element */}
+                              <img
+                                src={currentUrl}
+                                alt={slot.title}
+                                className="w-full h-full object-cover"
+                              />
+                              <span className="absolute top-2 left-2 px-2.5 py-1 bg-[#263D32]/90 text-[#F2EFE6] text-[10px] font-bold uppercase tracking-wider">
+                                Sección Web
+                              </span>
+                            </div>
+                            <div className="p-3.5 pb-2">
+                              <h3 className="font-serif text-lg text-[#263D32] font-bold">
+                                {slot.title}
+                              </h3>
+                              <p className="text-xs text-[#746657]">
+                                {slot.desc}
+                              </p>
+                            </div>
+                          </div>
 
-                      <button
-                        type="button"
-                        disabled={busyAction}
-                        onClick={() => {
-                          if (
-                            window.confirm(
-                              "¿Seguro que querés quitar esta foto de la galería?"
-                            )
-                          ) {
-                            runAdminAction(
-                              {
-                                type: "MANAGE_GALLERY",
-                                subAction: "DELETE",
-                                imageId: item.id,
-                              },
-                              "Foto eliminada de la galería."
-                            );
-                          }
-                        }}
-                        className="px-3 py-1.5 bg-red-50 hover:bg-red-100 text-red-800 border border-red-200 text-xs font-bold uppercase tracking-wider flex items-center gap-1 cursor-pointer"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                        <span>Quitar</span>
-                      </button>
-                    </div>
+                          <div className="p-3.5 pt-2 space-y-2.5">
+                            <div className="flex items-center gap-2">
+                              <label className="flex-1 py-2 px-3 bg-[#263D32] hover:bg-[#3A4E3C] text-[#F2EFE6] text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-1.5 cursor-pointer">
+                                <Upload className="w-3.5 h-3.5" />
+                                <span>
+                                  {isUploadingThis
+                                    ? "Subiendo..."
+                                    : "Subir foto"}
+                                </span>
+                                <input
+                                  type="file"
+                                  accept="image/jpeg,image/png,image/webp"
+                                  disabled={isUploadingThis || busyAction}
+                                  onChange={(e) => {
+                                    handleIllustrativeFileUpload(
+                                      "siteImages",
+                                      slot.key,
+                                      slot.title,
+                                      e.target.files?.[0]
+                                    );
+                                    e.target.value = "";
+                                  }}
+                                  className="hidden"
+                                />
+                              </label>
+                              <button
+                                type="button"
+                                disabled={busyAction || isUploadingThis}
+                                onClick={() =>
+                                  runAdminAction(
+                                    {
+                                      type: "UPDATE_ILLUSTRATIVE_IMAGE",
+                                      category: "siteImages",
+                                      key: slot.key,
+                                      reset: true,
+                                    },
+                                    `Se restauró la imagen original de "${slot.title}".`
+                                  )
+                                }
+                                className="py-2 px-2.5 bg-white border border-[#D8CEB9] hover:border-[#263D32] text-[#746657] hover:text-[#263D32] text-xs font-semibold flex items-center gap-1 cursor-pointer"
+                                title="Volver a la foto original por defecto"
+                              >
+                                <RefreshCw className="w-3.5 h-3.5" />
+                                <span>Original</span>
+                              </button>
+                            </div>
+
+                            <div className="flex gap-1.5">
+                              <input
+                                type="url"
+                                value={draftUrl}
+                                onChange={(e) =>
+                                  setIllustrativeUrlDrafts((prev) => ({
+                                    ...prev,
+                                    [slotId]: e.target.value,
+                                  }))
+                                }
+                                placeholder="O pegá un link https://..."
+                                className="flex-1 px-2.5 py-1.5 bg-white border border-[#D8CEB9] text-xs"
+                              />
+                              <button
+                                type="button"
+                                disabled={!draftUrl.trim() || busyAction}
+                                onClick={async () => {
+                                  const res = await runAdminAction(
+                                    {
+                                      type: "UPDATE_ILLUSTRATIVE_IMAGE",
+                                      category: "siteImages",
+                                      key: slot.key,
+                                      imageUrl: draftUrl.trim(),
+                                    },
+                                    `Imagen de "${slot.title}" actualizada.`
+                                  );
+                                  if (res.ok) {
+                                    setIllustrativeUrlDrafts((prev) => ({
+                                      ...prev,
+                                      [slotId]: "",
+                                    }));
+                                  }
+                                }}
+                                className="px-2.5 py-1.5 bg-[#263D32] disabled:opacity-40 text-white text-xs font-bold uppercase cursor-pointer"
+                                title="Guardar link de imagen"
+                              >
+                                <Save className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
-              ))}
-            </div>
+
+                {/* 2. IMÁGENES DE LAS 3 EXPERIENCIAS (experiences) */}
+                <div className="bg-white border border-[#D8CEB9] p-4 sm:p-6 shadow-sm space-y-5">
+                  <div className="border-b border-[#D8CEB9] pb-3">
+                    <h2 className="font-serif text-2xl sm:text-3xl text-[#263D32]">
+                      2. Imágenes de Experiencias (Vadeo, Balsa y Personalizadas)
+                    </h2>
+                    <p className="text-xs sm:text-sm text-[#746657] mt-0.5">
+                      Fotos ilustrativas de las 3 tarjetas de la sección
+                      &ldquo;Experiencias · El corazón de Traum&rdquo;.
+                    </p>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    {(store.experiences || []).map((exp) => {
+                      const slotId = `experiences:${exp.id}`;
+                      const isUploadingThis = uploadingSlotKey === slotId;
+                      const draftUrl = illustrativeUrlDrafts[slotId] ?? "";
+
+                      return (
+                        <div
+                          key={exp.id}
+                          className="border border-[#D8CEB9] bg-[#FAF8F3] flex flex-col justify-between overflow-hidden"
+                        >
+                          <div>
+                            <div className="relative aspect-[4/3] bg-[#292D29]">
+                              {/* eslint-disable-next-line @next/next/no-img-element */}
+                              <img
+                                src={exp.imageUrl}
+                                alt={exp.title}
+                                className="w-full h-full object-cover"
+                              />
+                              <span className="absolute top-2 left-2 px-2.5 py-1 bg-[#263D32]/90 text-[#F2EFE6] text-[10px] font-bold uppercase tracking-wider">
+                                Experiencia {exp.number}
+                              </span>
+                            </div>
+                            <div className="p-3.5 pb-2">
+                              <h3 className="font-serif text-lg text-[#263D32] font-bold">
+                                {exp.title}
+                              </h3>
+                              <p className="text-xs text-[#746657]">
+                                {exp.subtitle}
+                              </p>
+                            </div>
+                          </div>
+
+                          <div className="p-3.5 pt-2 space-y-2.5">
+                            <div className="flex items-center gap-2">
+                              <label className="flex-1 py-2 px-3 bg-[#263D32] hover:bg-[#3A4E3C] text-[#F2EFE6] text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-1.5 cursor-pointer">
+                                <Upload className="w-3.5 h-3.5" />
+                                <span>
+                                  {isUploadingThis
+                                    ? "Subiendo..."
+                                    : "Subir foto"}
+                                </span>
+                                <input
+                                  type="file"
+                                  accept="image/jpeg,image/png,image/webp"
+                                  disabled={isUploadingThis || busyAction}
+                                  onChange={(e) => {
+                                    handleIllustrativeFileUpload(
+                                      "experiences",
+                                      exp.id,
+                                      exp.title,
+                                      e.target.files?.[0]
+                                    );
+                                    e.target.value = "";
+                                  }}
+                                  className="hidden"
+                                />
+                              </label>
+                              <button
+                                type="button"
+                                disabled={busyAction || isUploadingThis}
+                                onClick={() =>
+                                  runAdminAction(
+                                    {
+                                      type: "UPDATE_ILLUSTRATIVE_IMAGE",
+                                      category: "experiences",
+                                      itemId: exp.id,
+                                      reset: true,
+                                    },
+                                    `Se restauró la imagen original de "${exp.title}".`
+                                  )
+                                }
+                                className="py-2 px-2.5 bg-white border border-[#D8CEB9] hover:border-[#263D32] text-[#746657] hover:text-[#263D32] text-xs font-semibold flex items-center gap-1 cursor-pointer"
+                                title="Volver a la foto original por defecto"
+                              >
+                                <RefreshCw className="w-3.5 h-3.5" />
+                                <span>Original</span>
+                              </button>
+                            </div>
+
+                            <div className="flex gap-1.5">
+                              <input
+                                type="url"
+                                value={draftUrl}
+                                onChange={(e) =>
+                                  setIllustrativeUrlDrafts((prev) => ({
+                                    ...prev,
+                                    [slotId]: e.target.value,
+                                  }))
+                                }
+                                placeholder="O pegá un link https://..."
+                                className="flex-1 px-2.5 py-1.5 bg-white border border-[#D8CEB9] text-xs"
+                              />
+                              <button
+                                type="button"
+                                disabled={!draftUrl.trim() || busyAction}
+                                onClick={async () => {
+                                  const res = await runAdminAction(
+                                    {
+                                      type: "UPDATE_ILLUSTRATIVE_IMAGE",
+                                      category: "experiences",
+                                      itemId: exp.id,
+                                      imageUrl: draftUrl.trim(),
+                                    },
+                                    `Imagen de "${exp.title}" actualizada.`
+                                  );
+                                  if (res.ok) {
+                                    setIllustrativeUrlDrafts((prev) => ({
+                                      ...prev,
+                                      [slotId]: "",
+                                    }));
+                                  }
+                                }}
+                                className="px-2.5 py-1.5 bg-[#263D32] disabled:opacity-40 text-white text-xs font-bold uppercase cursor-pointer"
+                                title="Guardar link de imagen"
+                              >
+                                <Save className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* 3. IMÁGENES DE LOS RÍOS Y LAGOS (destinations) */}
+                <div className="bg-white border border-[#D8CEB9] p-4 sm:p-6 shadow-sm space-y-5">
+                  <div className="border-b border-[#D8CEB9] pb-3">
+                    <h2 className="font-serif text-2xl sm:text-3xl text-[#263D32]">
+                      3. Imágenes de Ríos y Lagos (Sección Destinos)
+                    </h2>
+                    <p className="text-xs sm:text-sm text-[#746657] mt-0.5">
+                      Fotos ilustrativas de cada ambiente de pesca en la sección
+                      Destinos y en el mapa interactivo.
+                    </p>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {(store.destinations || []).map((dest) => {
+                      const slotId = `destinations:${dest.id}`;
+                      const isUploadingThis = uploadingSlotKey === slotId;
+                      const draftUrl = illustrativeUrlDrafts[slotId] ?? "";
+
+                      return (
+                        <div
+                          key={dest.id}
+                          className="border border-[#D8CEB9] bg-[#FAF8F3] flex flex-col justify-between overflow-hidden"
+                        >
+                          <div>
+                            <div className="relative aspect-[16/10] bg-[#292D29]">
+                              {/* eslint-disable-next-line @next/next/no-img-element */}
+                              <img
+                                src={dest.imageUrl}
+                                alt={dest.name}
+                                className="w-full h-full object-cover"
+                              />
+                              <span className="absolute top-2 left-2 px-2.5 py-1 bg-[#263D32]/90 text-[#F2EFE6] text-[10px] font-bold uppercase tracking-wider">
+                                {dest.waterType}
+                              </span>
+                            </div>
+                            <div className="p-3.5 pb-2">
+                              <h3 className="font-serif text-lg text-[#263D32] font-bold">
+                                {dest.name}
+                              </h3>
+                              <p className="text-xs text-[#746657] truncate">
+                                {dest.location}
+                              </p>
+                            </div>
+                          </div>
+
+                          <div className="p-3.5 pt-2 space-y-2.5">
+                            <div className="flex items-center gap-2">
+                              <label className="flex-1 py-2 px-3 bg-[#263D32] hover:bg-[#3A4E3C] text-[#F2EFE6] text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-1.5 cursor-pointer">
+                                <Upload className="w-3.5 h-3.5" />
+                                <span>
+                                  {isUploadingThis
+                                    ? "Subiendo..."
+                                    : "Subir foto"}
+                                </span>
+                                <input
+                                  type="file"
+                                  accept="image/jpeg,image/png,image/webp"
+                                  disabled={isUploadingThis || busyAction}
+                                  onChange={(e) => {
+                                    handleIllustrativeFileUpload(
+                                      "destinations",
+                                      dest.id,
+                                      dest.name,
+                                      e.target.files?.[0]
+                                    );
+                                    e.target.value = "";
+                                  }}
+                                  className="hidden"
+                                />
+                              </label>
+                              <button
+                                type="button"
+                                disabled={busyAction || isUploadingThis}
+                                onClick={() =>
+                                  runAdminAction(
+                                    {
+                                      type: "UPDATE_ILLUSTRATIVE_IMAGE",
+                                      category: "destinations",
+                                      itemId: dest.id,
+                                      reset: true,
+                                    },
+                                    `Se restauró la imagen original de "${dest.name}".`
+                                  )
+                                }
+                                className="py-2 px-2.5 bg-white border border-[#D8CEB9] hover:border-[#263D32] text-[#746657] hover:text-[#263D32] text-xs font-semibold flex items-center gap-1 cursor-pointer"
+                                title="Volver a la foto original por defecto"
+                              >
+                                <RefreshCw className="w-3.5 h-3.5" />
+                                <span>Original</span>
+                              </button>
+                            </div>
+
+                            <div className="flex gap-1.5">
+                              <input
+                                type="url"
+                                value={draftUrl}
+                                onChange={(e) =>
+                                  setIllustrativeUrlDrafts((prev) => ({
+                                    ...prev,
+                                    [slotId]: e.target.value,
+                                  }))
+                                }
+                                placeholder="O pegá un link https://..."
+                                className="flex-1 px-2.5 py-1.5 bg-white border border-[#D8CEB9] text-xs"
+                              />
+                              <button
+                                type="button"
+                                disabled={!draftUrl.trim() || busyAction}
+                                onClick={async () => {
+                                  const res = await runAdminAction(
+                                    {
+                                      type: "UPDATE_ILLUSTRATIVE_IMAGE",
+                                      category: "destinations",
+                                      itemId: dest.id,
+                                      imageUrl: draftUrl.trim(),
+                                    },
+                                    `Imagen de "${dest.name}" actualizada.`
+                                  );
+                                  if (res.ok) {
+                                    setIllustrativeUrlDrafts((prev) => ({
+                                      ...prev,
+                                      [slotId]: "",
+                                    }));
+                                  }
+                                }}
+                                className="px-2.5 py-1.5 bg-[#263D32] disabled:opacity-40 text-white text-xs font-bold uppercase cursor-pointer"
+                                title="Guardar link de imagen"
+                              >
+                                <Save className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {imagesSubTab === "galeria" && (
+              <div className="bg-white border border-[#D8CEB9] p-4 sm:p-6 shadow-sm space-y-6">
+                <div className="border-b border-[#D8CEB9] pb-4">
+                  <h2 className="font-serif text-2xl sm:text-3xl text-[#263D32]">
+                    Galería de Fotos de la Página Principal
+                  </h2>
+                  <p className="text-xs sm:text-sm text-[#746657] mt-0.5">
+                    Subí una o varias fotos a la vez. El sistema las redimensiona
+                    y optimiza automáticamente para que la web cargue rápido.
+                  </p>
+                </div>
+
+                {/* ZONA DE SUBIDA DE 1 O VARIAS IMÁGENES */}
+                <div
+                  onDragOver={(e) => e.preventDefault()}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    if (
+                      e.dataTransfer.files &&
+                      e.dataTransfer.files.length > 0
+                    ) {
+                      handleGalleryFilesSelected(e.dataTransfer.files);
+                    }
+                  }}
+                  className="border-2 border-dashed border-[#65745A] bg-[#F2EFE6]/70 p-6 text-center space-y-4"
+                >
+                  <Upload className="w-8 h-8 text-[#263D32] mx-auto" />
+                  <div>
+                    <p className="text-sm font-bold text-[#263D32]">
+                      Seleccioná una o varias fotos desde tu celular o
+                      computadora
+                    </p>
+                    <p className="text-xs text-[#746657] mt-1">
+                      Formatos aceptados: JPG, PNG, WebP (máx. 15 MB por foto,
+                      se optimizan automáticamente).
+                    </p>
+                  </div>
+
+                  <div className="max-w-md mx-auto">
+                    <input
+                      type="text"
+                      value={newGalleryCaption}
+                      onChange={(e) => setNewGalleryCaption(e.target.value)}
+                      placeholder="Epígrafe corto opcional para las fotos a subir (ej: Trucha marrón en el Malleo)"
+                      className="w-full px-3.5 py-2.5 bg-white border border-[#D8CEB9] text-xs sm:text-sm mb-3"
+                    />
+
+                    <label className="inline-flex items-center justify-center gap-2 px-6 py-3 bg-[#263D32] hover:bg-[#3A4E3C] text-[#F2EFE6] text-xs font-bold uppercase tracking-wider cursor-pointer shadow-sm">
+                      <Upload className="w-4 h-4" />
+                      <span>
+                        {uploadingGallery
+                          ? "Optimizando y subiendo..."
+                          : "Elegir foto(s) para subir"}
+                      </span>
+                      <input
+                        type="file"
+                        accept="image/jpeg,image/png,image/webp"
+                        multiple
+                        disabled={uploadingGallery}
+                        onChange={(e) => {
+                          handleGalleryFilesSelected(e.target.files);
+                          e.target.value = "";
+                        }}
+                        className="hidden"
+                      />
+                    </label>
+                  </div>
+                </div>
+
+                {/* GRILLA DE FOTOS ACTUALES EN LA GALERÍA */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {sortedGallery.map((item: GalleryImageItem, index: number) => (
+                    <div
+                      key={item.id}
+                      className="border border-[#D8CEB9] bg-[#FAF8F3] overflow-hidden flex flex-col justify-between"
+                    >
+                      <div className="relative aspect-[4/3] bg-[#292D29]">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={item.imageUrl}
+                          alt={item.caption || `Foto ${index + 1}`}
+                          className="w-full h-full object-cover"
+                        />
+                        <span className="absolute top-2 left-2 px-2.5 py-1 bg-[#263D32]/90 text-white text-[11px] font-bold">
+                          #{index + 1}
+                        </span>
+                      </div>
+
+                      <div className="p-3.5 space-y-3">
+                        <div>
+                          <label className="block text-[10px] uppercase tracking-wider text-[#746657] mb-1">
+                            Epígrafe corto (opcional)
+                          </label>
+                          <div className="flex gap-1.5">
+                            <input
+                              type="text"
+                              value={
+                                editingCaptions[item.id] ?? item.caption ?? ""
+                              }
+                              onChange={(e) =>
+                                setEditingCaptions((prev) => ({
+                                  ...prev,
+                                  [item.id]: e.target.value,
+                                }))
+                              }
+                              placeholder="Sin epígrafe..."
+                              className="flex-1 px-2.5 py-1.5 bg-white border border-[#D8CEB9] text-xs"
+                            />
+                            <button
+                              type="button"
+                              onClick={() =>
+                                runAdminAction(
+                                  {
+                                    type: "MANAGE_GALLERY",
+                                    subAction: "UPDATE_CAPTION",
+                                    imageId: item.id,
+                                    caption: editingCaptions[item.id] ?? "",
+                                  },
+                                  "Epígrafe guardado."
+                                )
+                              }
+                              className="px-2.5 py-1.5 bg-[#263D32] text-white text-xs font-bold uppercase cursor-pointer"
+                              title="Guardar epígrafe"
+                            >
+                              <Save className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Botones de 1 clic para cambiar orden o eliminar */}
+                        <div className="flex items-center justify-between gap-2 pt-2 border-t border-[#D8CEB9]">
+                          <div className="flex items-center gap-1">
+                            <button
+                              type="button"
+                              disabled={index === 0 || busyAction}
+                              onClick={() =>
+                                runAdminAction({
+                                  type: "MANAGE_GALLERY",
+                                  subAction: "REORDER",
+                                  imageId: item.id,
+                                  direction: "LEFT",
+                                })
+                              }
+                              className="px-2.5 py-1.5 bg-white border border-[#D8CEB9] hover:border-[#263D32] disabled:opacity-40 text-xs font-semibold flex items-center gap-1 cursor-pointer"
+                              title="Mover antes"
+                            >
+                              <ArrowUp className="w-3.5 h-3.5" />
+                              <span>Subir</span>
+                            </button>
+                            <button
+                              type="button"
+                              disabled={
+                                index === sortedGallery.length - 1 || busyAction
+                              }
+                              onClick={() =>
+                                runAdminAction({
+                                  type: "MANAGE_GALLERY",
+                                  subAction: "REORDER",
+                                  imageId: item.id,
+                                  direction: "RIGHT",
+                                })
+                              }
+                              className="px-2.5 py-1.5 bg-white border border-[#D8CEB9] hover:border-[#263D32] disabled:opacity-40 text-xs font-semibold flex items-center gap-1 cursor-pointer"
+                              title="Mover después"
+                            >
+                              <ArrowDown className="w-3.5 h-3.5" />
+                              <span>Bajar</span>
+                            </button>
+                          </div>
+
+                          <button
+                            type="button"
+                            disabled={busyAction}
+                            onClick={() => {
+                              if (
+                                window.confirm(
+                                  "¿Seguro que querés quitar esta foto de la galería?"
+                                )
+                              ) {
+                                runAdminAction(
+                                  {
+                                    type: "MANAGE_GALLERY",
+                                    subAction: "DELETE",
+                                    imageId: item.id,
+                                  },
+                                  "Foto eliminada de la galería."
+                                );
+                              }
+                            }}
+                            className="px-3 py-1.5 bg-red-50 hover:bg-red-100 text-red-800 border border-red-200 text-xs font-bold uppercase tracking-wider flex items-center gap-1 cursor-pointer"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                            <span>Quitar</span>
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         )}
 

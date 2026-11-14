@@ -190,55 +190,47 @@ export function buildTraumBrandedEmail(opts: TraumEmailTemplateOptions): {
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta http-equiv="X-UA-Compatible" content="IE=edge" />
   <title>${escapeHtml(opts.title)} — ${escapeHtml(brandName)}</title>
 </head>
-<body style="margin: 0; padding: 0; background-color: #E7E1D3; font-family: Arial, Helvetica, sans-serif; -webkit-font-smoothing: antialiased;">
-  <div style="display: none; max-height: 0; overflow: hidden; opacity: 0; color: transparent; mso-hide: all;">
-    ${escapeHtml(opts.preheader)}
-  </div>
-
-  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color: #E7E1D3; padding: 24px 10px;">
+<body style="margin: 0; padding: 0; background-color: #F2EFE6; font-family: Arial, Helvetica, sans-serif; color: #292D29;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color: #F2EFE6; padding: 20px 10px;">
     <tr>
       <td align="center">
-        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width: 600px; width: 100%; background-color: #F2EFE6; border: 1px solid #D8CEB9;">
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width: 600px; width: 100%; background-color: #FFFFFF; border: 1px solid #D8CEB9;">
           
           <tr>
-            <td align="center" style="background-color: #263D32; padding: 30px 24px 26px 24px; border-bottom: 3px solid #746657;">
-              <img src="${logoUrl}" alt="${escapeHtml(
-    brandName
-  )}" width="68" height="68" style="display: block; width: 68px; height: 68px; border-radius: 50%; border: 2px solid #D8CEB9; margin: 0 auto 12px auto; object-fit: cover;" />
-              <p style="margin: 0; font-family: Georgia, 'Times New Roman', serif; font-size: 24px; letter-spacing: 0.22em; color: #F2EFE6; text-transform: uppercase;">
+            <td align="center" style="background-color: #263D32; padding: 26px 24px 22px 24px; border-bottom: 3px solid #746657;">
+              <p style="margin: 0; font-family: Georgia, 'Times New Roman', serif; font-size: 24px; letter-spacing: 0.2em; color: #F2EFE6; text-transform: uppercase;">
                 ${escapeHtml(brandName)}
               </p>
-              <p style="margin: 4px 0 0 0; font-family: Arial, Helvetica, sans-serif; font-size: 10px; letter-spacing: 0.28em; color: #D8CEB9; text-transform: uppercase;">
+              <p style="margin: 4px 0 0 0; font-family: Arial, Helvetica, sans-serif; font-size: 11px; letter-spacing: 0.22em; color: #D8CEB9; text-transform: uppercase;">
                 ${escapeHtml(brandSubtitle)}
               </p>
-              <p style="margin: 10px 0 0 0; font-family: Georgia, 'Times New Roman', serif; font-style: italic; font-size: 13px; color: #E4DEC9;">
+              <p style="margin: 8px 0 0 0; font-family: Georgia, 'Times New Roman', serif; font-style: italic; font-size: 13px; color: #E4DEC9;">
                 &ldquo;${escapeHtml(tagline)}&rdquo;
               </p>
             </td>
           </tr>
 
           <tr>
-            <td style="padding: 32px 26px 28px 26px; background-color: #F2EFE6;">
+            <td style="padding: 30px 26px 26px 26px; background-color: #FFFFFF;">
               <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin-bottom: 16px;">
                 <tr>
-                  <td style="background-color: ${badgeBg}; color: ${badgeColor}; font-family: Arial, Helvetica, sans-serif; font-size: 10px; font-weight: bold; text-transform: uppercase; letter-spacing: 0.16em; padding: 5px 12px;">
+                  <td style="background-color: ${badgeBg}; color: ${badgeColor}; font-family: Arial, Helvetica, sans-serif; font-size: 11px; font-weight: bold; text-transform: uppercase; letter-spacing: 0.12em; padding: 5px 12px;">
                     ${escapeHtml(opts.badgeText)}
                   </td>
                 </tr>
               </table>
 
-              <h1 style="margin: 0 0 8px 0; font-family: Georgia, 'Times New Roman', serif; font-size: 24px; font-weight: normal; line-height: 1.3; color: #263D32;">
+              <h1 style="margin: 0 0 8px 0; font-family: Georgia, 'Times New Roman', serif; font-size: 23px; font-weight: normal; line-height: 1.3; color: #263D32;">
                 ${escapeHtml(opts.title)}
               </h1>
               ${
                 opts.subtitle
-                  ? `<p style="margin: 0 0 20px 0; font-family: Arial, Helvetica, sans-serif; font-size: 13px; color: #746657;">${escapeHtml(
+                  ? `<p style="margin: 0 0 18px 0; font-family: Arial, Helvetica, sans-serif; font-size: 13px; color: #746657;">${escapeHtml(
                       opts.subtitle
                     )}</p>`
-                  : `<div style="height: 14px;"></div>`
+                  : `<div style="height: 12px;"></div>`
               }
 
               <p style="margin: 0 0 12px 0; font-family: Georgia, 'Times New Roman', serif; font-size: 16px; color: #263D32;">
@@ -248,9 +240,9 @@ export function buildTraumBrandedEmail(opts: TraumEmailTemplateOptions): {
 
               ${highlightHtml}
 
-              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin: 22px 0; border: 1px solid #D8CEB9; background-color: #FAF8F3;">
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin: 20px 0; border: 1px solid #D8CEB9; background-color: #FAF8F3;">
                 <tr>
-                  <td colspan="2" style="background-color: #263D32; color: #F2EFE6; padding: 10px 14px; font-family: Arial, Helvetica, sans-serif; font-size: 11px; font-weight: bold; text-transform: uppercase; letter-spacing: 0.15em;">
+                  <td colspan="2" style="background-color: #263D32; color: #F2EFE6; padding: 10px 14px; font-family: Arial, Helvetica, sans-serif; font-size: 11px; font-weight: bold; text-transform: uppercase; letter-spacing: 0.12em;">
                     ${escapeHtml(opts.rowsTitle)}
                   </td>
                 </tr>
@@ -264,33 +256,15 @@ export function buildTraumBrandedEmail(opts: TraumEmailTemplateOptions): {
           </tr>
 
           <tr>
-            <td style="background-color: #263D32; padding: 24px 24px; text-align: center; color: #D8CEB9;">
-              <p style="margin: 0 0 6px 0; font-family: Georgia, 'Times New Roman', serif; font-size: 14px; color: #F2EFE6; letter-spacing: 0.1em; text-transform: uppercase;">
+            <td style="background-color: #263D32; padding: 20px 24px; text-align: center; color: #D8CEB9;">
+              <p style="margin: 0 0 6px 0; font-family: Georgia, 'Times New Roman', serif; font-size: 14px; color: #F2EFE6; letter-spacing: 0.08em;">
                 ${escapeHtml(brandName)} · ${escapeHtml(brandSubtitle)}
               </p>
-              <p style="margin: 0 0 12px 0; font-family: Arial, Helvetica, sans-serif; font-size: 12px; color: #D8CEB9;">
+              <p style="margin: 0 0 8px 0; font-family: Arial, Helvetica, sans-serif; font-size: 12px; color: #D8CEB9;">
                 ${escapeHtml(location)}
               </p>
-              <p style="margin: 0 0 8px 0; font-family: Arial, Helvetica, sans-serif; font-size: 12px; color: #E4DEC9;">
-                WhatsApp: <a href="https://wa.me/${guideWhatsapp.replace(
-                  /\D/g,
-                  ""
-                )}" style="color: #F2EFE6; text-decoration: underline;">${escapeHtml(
-    guideWhatsapp
-  )}</a>
-                &nbsp;|&nbsp;
-                Email: <a href="mailto:${escapeHtml(
-                  guideEmail
-                )}" style="color: #F2EFE6; text-decoration: underline;">${escapeHtml(
-    guideEmail
-  )}</a>
-              </p>
-              <p style="margin: 0; font-family: Arial, Helvetica, sans-serif; font-size: 11px; color: #B8AE99;">
-                Instagram: <a href="${instagramUrl}" style="color: #D8CEB9; text-decoration: underline;">${escapeHtml(
-    instagramHandle
-  )}</a>
-                &nbsp;·&nbsp;
-                <a href="${siteUrl}" style="color: #D8CEB9; text-decoration: underline;">traumflycast.vercel.app</a>
+              <p style="margin: 0; font-family: Arial, Helvetica, sans-serif; font-size: 12px; color: #E4DEC9;">
+                WhatsApp: ${escapeHtml(guideWhatsapp)} &nbsp;·&nbsp; Email: ${escapeHtml(guideEmail)} &nbsp;·&nbsp; Instagram: ${escapeHtml(instagramHandle)}
               </p>
             </td>
           </tr>
@@ -494,15 +468,24 @@ async function dispatchDirectEmail(params: {
       },
     });
 
-    const rawBrand = settings.brandName
-      ? `${settings.brandName} · ${settings.brandSubtitle || "Fly Cast Patagonia"}`
-      : "TRAUM Fly Cast Patagonia";
-    const brandTitle = sanitizeHeaderValue(rawBrand).replace(/"/g, "");
+    const brandTitle = "Traum Fly Cast Patagonia";
+    const guideAddr = (
+      settings.notificationEmail ||
+      settings.email ||
+      ""
+    )
+      .trim()
+      .toLowerCase();
+    const isToGuide =
+      guideAddr.length > 0 && recipient.toLowerCase() === guideAddr;
+    const effectiveReplyTo = isToGuide
+      ? sanitizeHeaderValue(replyTo || senderEmail)
+      : senderEmail;
 
     await transporter.sendMail({
       from: `"${brandTitle}" <${senderEmail}>`,
       to: recipient,
-      replyTo: sanitizeHeaderValue(replyTo || senderEmail),
+      replyTo: effectiveReplyTo,
       subject: sanitizeHeaderValue(subject),
       text,
       html,

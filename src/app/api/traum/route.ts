@@ -37,9 +37,11 @@ import {
   RegretRequestItem,
   ReviewItem,
   ServiceGroupType,
+  SiteImagesConfig,
   TraumStoreData,
   WaitlistPromotionAlert,
 } from "@/types/traum";
+import { initialTraumData } from "@/data/initial-traum-data";
 
 // Límite de envíos por IP (ventana móvil de 60 segundos)
 const ipRateLimitMap = new Map<string, number[]>();
@@ -349,6 +351,7 @@ export async function POST(request: NextRequest) {
       "SAVE_AND_VERIFY_EMAIL_SETTINGS",
       "SEND_TEST_EMAIL",
       "MANAGE_GALLERY",
+      "UPDATE_ILLUSTRATIVE_IMAGE",
     ];
     if (adminOnlyActions.includes(actionType)) {
       const currentForAuth = await getTraumStore();
@@ -2126,6 +2129,105 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({
         ok: true,
         ...result,
+        store: sanitizeStoreForClient(savedStore, true),
+      });
+    }
+
+    // =========================================================================
+    // M) ACTUALIZAR IMÁGENES ILUSTRATIVAS DE LA WEB (UPDATE_ILLUSTRATIVE_IMAGE)
+    // =========================================================================
+    if (actionType === "UPDATE_ILLUSTRATIVE_IMAGE") {
+      const category = String(payload.category || "").trim(); // "siteImages" | "experiences" | "destinations"
+      const targetKey = String(payload.key || payload.itemId || "").trim();
+      const resetToDefault = Boolean(payload.reset);
+      const rawImageUrl = String(payload.imageUrl || "").trim();
+
+      if (!resetToDefault && !rawImageUrl) {
+        return NextResponse.json(
+          { error: "Seleccioná una imagen o ingresá una URL válida." },
+          { status: 400 }
+        );
+      }
+
+      const { store: savedStore } = await runStoreTransaction(
+        async (current) => {
+          if (category === "siteImages") {
+            const validKeys: Array<keyof SiteImagesConfig> = [
+              "heroBg",
+              "philosophyMain",
+              "pillarCapture",
+              "pillarDisconnect",
+              "pillarShare",
+              "conservationMain",
+              "thoreauQuoteBg",
+            ];
+            const typedKey = targetKey as keyof SiteImagesConfig;
+            if (!validKeys.includes(typedKey)) {
+              throw new BusinessRuleError(
+                "Clave de imagen de sección no reconocida.",
+                400
+              );
+            }
+            const nextUrl = resetToDefault
+              ? initialTraumData.siteImages[typedKey]
+              : rawImageUrl;
+            return {
+              nextStore: {
+                ...current,
+                siteImages: {
+                  ...current.siteImages,
+                  [typedKey]: nextUrl,
+                },
+              },
+              result: { updated: true },
+            };
+          }
+
+          if (category === "experiences") {
+            const defaultExp = initialTraumData.experiences.find(
+              (e) => e.id === targetKey
+            );
+            const nextUrl = resetToDefault
+              ? defaultExp?.imageUrl || rawImageUrl
+              : rawImageUrl;
+            return {
+              nextStore: {
+                ...current,
+                experiences: (current.experiences || []).map((exp) =>
+                  exp.id === targetKey ? { ...exp, imageUrl: nextUrl } : exp
+                ),
+              },
+              result: { updated: true },
+            };
+          }
+
+          if (category === "destinations") {
+            const defaultDest = initialTraumData.destinations.find(
+              (d) => d.id === targetKey
+            );
+            const nextUrl = resetToDefault
+              ? defaultDest?.imageUrl || rawImageUrl
+              : rawImageUrl;
+            return {
+              nextStore: {
+                ...current,
+                destinations: (current.destinations || []).map((dest) =>
+                  dest.id === targetKey ? { ...dest, imageUrl: nextUrl } : dest
+                ),
+              },
+              result: { updated: true },
+            };
+          }
+
+          throw new BusinessRuleError(
+            "Categoría de imagen ilustrativa no válida.",
+            400
+          );
+        }
+      );
+
+      return NextResponse.json({
+        ok: true,
         store: sanitizeStoreForClient(savedStore, true),
       });
     }
