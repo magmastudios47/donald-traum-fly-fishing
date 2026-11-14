@@ -417,6 +417,9 @@ export async function verifyDirectSmtpConnection(
       host: "smtp.gmail.com",
       port: 465,
       secure: true,
+      connectionTimeout: 8000,
+      greetingTimeout: 8000,
+      socketTimeout: 12000,
       auth: {
         user: senderEmail,
         pass: senderPass,
@@ -438,6 +441,10 @@ export async function verifyDirectSmtpConnection(
   }
 }
 
+function sanitizeHeaderValue(val: string): string {
+  return String(val || "").replace(/[\r\n]+/g, " ").trim();
+}
+
 /**
  * Envío 100% directo desde el correo emisor configurado hacia el destinatario exacto.
  * Sin servicios intermedios raros, sin Resend y sin redirecciones cruzadas:
@@ -452,7 +459,7 @@ async function dispatchDirectEmail(params: {
   settings: SiteSettings;
 }): Promise<SingleSendResult> {
   const { to, replyTo, subject, html, text, settings } = params;
-  const recipient = (to || "").trim();
+  const recipient = sanitizeHeaderValue(to);
 
   if (!recipient || !recipient.includes("@")) {
     return {
@@ -478,21 +485,25 @@ async function dispatchDirectEmail(params: {
       host: "smtp.gmail.com",
       port: 465,
       secure: true,
+      connectionTimeout: 8000,
+      greetingTimeout: 8000,
+      socketTimeout: 12000,
       auth: {
         user: senderEmail,
         pass: senderPass,
       },
     });
 
-    const brandTitle = settings.brandName
+    const rawBrand = settings.brandName
       ? `${settings.brandName} · ${settings.brandSubtitle || "Fly Cast Patagonia"}`
       : "TRAUM Fly Cast Patagonia";
+    const brandTitle = sanitizeHeaderValue(rawBrand).replace(/"/g, "");
 
     await transporter.sendMail({
       from: `"${brandTitle}" <${senderEmail}>`,
       to: recipient,
-      replyTo: replyTo || senderEmail,
-      subject,
+      replyTo: sanitizeHeaderValue(replyTo || senderEmail),
+      subject: sanitizeHeaderValue(subject),
       text,
       html,
     });
@@ -697,46 +708,95 @@ export async function sendEnrollmentNotificationEmail(
   const clientEmail = (enrollment.email || "").trim();
 
   const isWaitlist = enrollment.status === "lista_espera";
-  const statusLabel = isWaitlist ? "LISTA DE ESPERA" : "TURNO RESERVADO";
+  const receipt = enrollment.paymentReceipt;
+  const hasPaidDeposit =
+    !isWaitlist && receipt && receipt.status === "aprobado";
+
+  const statusLabel = isWaitlist
+    ? "LISTA DE ESPERA"
+    : hasPaidDeposit
+    ? "SEÑA ABONADA · TURNO CONFIRMADO"
+    : "TURNO RESERVADO";
 
   const waToClient = buildWhatsAppLink(
     enrollment.whatsapp,
-    `Hola ${enrollment.fullName}, te escribimos de TRAUM Fly Cast Patagonia por tu turno (${enrollment.bookingCode}) para la salida del ${departure.date} en ${departure.destination}.`
-  );
-
-  const waToGuide = buildWhatsAppLink(
-    settings.whatsappNumber || "+5492944306651",
-    `Hola TRAUM! Reservé lugar en la salida del ${departure.date} en ${departure.destination} (Código ${enrollment.bookingCode}, ${enrollment.participantsCount} persona/s).`
+    `Hola ${enrollment.fullName}, te escribimos de TRAUM Fly Cast Patagonia por tu turno confirmado (${enrollment.bookingCode}) para la salida del ${departure.date} en ${departure.destination}.`
   );
 
   const scheduleStr = departure.endTime
     ? `${departure.startTime} a ${departure.endTime} hs`
     : `${departure.startTime} hs`;
 
+  const formatMoney = (val: number) =>
+    `$${Math.round(Number(val) || 0).toLocaleString("es-AR")} ARS`;
+
+  const paymentRowsForGuide: TraumTemplateRow[] = hasPaidDeposit
+    ? [
+        {
+          label: "Estado de pago",
+          value: `SEÑA ABONADA EN WEB (${receipt.depositPercentage}%)`,
+          highlight: true,
+        },
+        {
+          label: "N° de operación",
+          value: receipt.paymentId,
+          highlight: true,
+        },
+        {
+          label: "Tarjeta utilizada",
+          value: `${receipt.cardBrand || "TARJETA"} **** ${
+            receipt.cardLast4 || "----"
+          }`,
+        },
+        {
+          label: `Valor por ${receipt.spotsBooked} cupo(s)`,
+          value: `${formatMoney(receipt.subtotalForSpots)} (${formatMoney(
+            receipt.pricePerSpot
+          )} por cupo)`,
+        },
+        {
+          label: `Seña acreditada (${receipt.depositPercentage}%)`,
+          value: formatMoney(receipt.depositPaid),
+          highlight: true,
+        },
+        {
+          label: "Saldo restante (a cobrar en destino)",
+          value: formatMoney(receipt.remainingBalance),
+        },
+      ]
+    : [];
+
   // 1) Correo ÚNICAMENTE para el Guía (al mail puesto en el Panel Admin)
   const guideSubject = `Nuevo Turno [${statusLabel}] ${enrollment.bookingCode} — ${enrollment.fullName} (${departure.date})`;
   const guideBuilt = buildTraumBrandedEmail({
-    preheader: `${enrollment.fullName} sacó turno para el ${departure.date} en ${departure.destination}.`,
+    preheader: `${enrollment.fullName} reservó turno para el ${departure.date} en ${departure.destination}.`,
     badgeText: statusLabel,
     badgeBg: isWaitlist ? "#8B5E2B" : "#263D32",
-    title: `Nuevo turno en ${departure.destination}`,
+    title: hasPaidDeposit
+      ? `Turno con seña abonada en ${departure.destination}`
+      : `Nuevo turno en ${departure.destination}`,
     subtitle: `Fecha: ${departure.date} · Código ${enrollment.bookingCode}`,
     greeting: "Hola,",
-    introParagraphs: [
-      `${enrollment.fullName} (${enrollment.participantsCount} persona/s) se anotó en la salida programada del ${departure.date}.`,
-    ],
-    rowsTitle: "Datos del turno",
+    introParagraphs: hasPaidDeposit
+      ? [
+          `${enrollment.fullName} (${enrollment.participantsCount} persona/s) abonó la seña con tarjeta en la página y su lugar en la salida del ${departure.date} ya quedó confirmado automáticamente en tu calendario.`,
+        ]
+      : [
+          `${enrollment.fullName} (${enrollment.participantsCount} persona/s) se anotó en la salida programada del ${departure.date}.`,
+        ],
+    rowsTitle: "Datos del turno y liquidación",
     rows: [
-      { label: "Código", value: enrollment.bookingCode, highlight: true },
+      { label: "Código de reserva", value: enrollment.bookingCode, highlight: true },
       { label: "Estado", value: statusLabel, highlight: true },
       { label: "Fecha", value: departure.date, highlight: true },
       { label: "Horario", value: scheduleStr },
       { label: "Río / Destino", value: departure.destination },
       { label: "Modalidad", value: departure.experienceType },
       {
-        label: "Cantidad de personas",
-        value: `${enrollment.participantsCount} persona(s)`,
+        label: "Cupos contratados",
+        value: `${enrollment.participantsCount} de ${departure.maxParticipants} cupo(s)`,
       },
+      ...paymentRowsForGuide,
       { label: "Nombre del cliente", value: enrollment.fullName },
       { label: "Teléfono / WhatsApp", value: enrollment.whatsapp },
       { label: "Correo del cliente", value: clientEmail },
@@ -774,50 +834,116 @@ export async function sendEnrollmentNotificationEmail(
     clientEmail !== "cliente@traumflycast.com"
   ) {
     const clientSubject = isWaitlist
-      ? `Recibimos tu solicitud en lista de espera (${enrollment.bookingCode}) — TRAUM Fly Cast Patagonia`
-      : `Recibimos tu reserva de salida (${enrollment.bookingCode}) — TRAUM Fly Cast Patagonia`;
+      ? `Constancia de Lista de Espera (${enrollment.bookingCode}) — TRAUM Fly Cast Patagonia`
+      : hasPaidDeposit
+      ? `Comprobante Oficial de Reserva y Pago (${enrollment.bookingCode}) — TRAUM Fly Cast Patagonia`
+      : `Confirmación de Reserva de Salida (${enrollment.bookingCode}) — TRAUM Fly Cast Patagonia`;
+
+    const clientPaymentRows: TraumTemplateRow[] = hasPaidDeposit
+      ? [
+          {
+            label: "N° de operación de pago",
+            value: receipt.paymentId,
+            highlight: true,
+          },
+          {
+            label: "Medio de pago",
+            value: `${receipt.cardBrand || "TARJETA"} terminada en **** ${
+              receipt.cardLast4 || "----"
+            }`,
+          },
+          {
+            label: `Valor total de la salida (${receipt.maxParticipants} cupos)`,
+            value: `${formatMoney(receipt.departureTotalPrice)} (${formatMoney(
+              receipt.pricePerSpot
+            )} por cupo)`,
+          },
+          {
+            label: `Subtotal por tus ${receipt.spotsBooked} cupo(s)`,
+            value: formatMoney(receipt.subtotalForSpots),
+          },
+          {
+            label: `Menos saldo a abonar el día de la salida (${
+              100 - receipt.depositPercentage
+            }%)`,
+            value: `- ${formatMoney(receipt.remainingBalance)}`,
+          },
+          {
+            label: `Seña abonada hoy (${receipt.depositPercentage}%)`,
+            value: formatMoney(receipt.depositPaid),
+            highlight: true,
+          },
+        ]
+      : [];
 
     const clientBuilt = buildTraumBrandedEmail({
       preheader: isWaitlist
         ? `Quedaste registrado en la lista de espera para el ${departure.date} en ${departure.destination}.`
+        : hasPaidDeposit
+        ? `Comprobante oficial de reserva ${enrollment.bookingCode} y pago de seña (${formatMoney(
+            receipt.depositPaid
+          )}).`
         : `Recibimos tu inscripción para la salida del ${departure.date} en ${departure.destination}.`,
-      badgeText: isWaitlist ? "Lista de Espera" : "Turno Confirmado",
+      badgeText: isWaitlist
+        ? "Lista de Espera"
+        : hasPaidDeposit
+        ? "Seña Abonada · Turno Confirmado"
+        : "Turno Confirmado",
       badgeBg: isWaitlist ? "#8B5E2B" : "#263D32",
       title: isWaitlist
         ? "Recibimos tu anotación en lista de espera"
-        : "Recibimos tu reserva de salida",
-      subtitle: `${departure.destination} · ${departure.date}`,
+        : hasPaidDeposit
+        ? "Comprobante Oficial de Reserva y Pago"
+        : "Confirmación de tu reserva de salida",
+      subtitle: `${departure.destination} · ${departure.date} · Código ${enrollment.bookingCode}`,
       greeting: `Hola ${enrollment.fullName},`,
       introParagraphs: isWaitlist
         ? [
-            `Registramos tu solicitud en la lista de espera para la salida del ${departure.date} en ${departure.destination}.`,
+            `Registramos tu solicitud en la lista de espera para la salida del ${departure.date} en ${departure.destination}. No se realizó ningún cargo en tu tarjeta.`,
             "Si se libera un cupo para esa fecha, nuestro guía se comunicará con vos de inmediato.",
           ]
+        : hasPaidDeposit
+        ? [
+            `Tu pago de seña fue procesado con éxito en nuestra página y tus ${enrollment.participantsCount} cupo(s) para la salida del ${departure.date} en ${departure.destination} ya se encuentran 100% confirmados.`,
+            "No necesitás enviar ningún comprobante adicional por WhatsApp. Conservá este correo como constancia oficial de tu reserva y pago.",
+          ]
         : [
-            `Recibimos correctamente tu anotación para la salida del ${departure.date} en ${departure.destination} (Código ${enrollment.bookingCode}).`,
-            "Nuestro guía se va a comunicar con vos para coordinar el punto de encuentro y todos los detalles de la jornada.",
+            `Tu lugar para la salida del ${departure.date} en ${departure.destination} (Código ${enrollment.bookingCode}) quedó confirmado.`,
           ],
-      rowsTitle: "Detalle de tu salida",
+      highlightBox: hasPaidDeposit
+        ? {
+            title: `Pago de Seña Aprobado · Operación ${receipt.paymentId}`,
+            body: `Se debitó la seña del ${
+              receipt.depositPercentage
+            }% (${formatMoney(
+              receipt.depositPaid
+            )}) con tu tarjeta ${receipt.cardBrand || "TARJETA"} **** ${
+              receipt.cardLast4 || "----"
+            }. El saldo restante de ${formatMoney(
+              receipt.remainingBalance
+            )} se abona directamente el día de la salida.`,
+            bgColor: "#ECE6D8",
+            borderColor: "#263D32",
+            textColor: "#263D32",
+          }
+        : undefined,
+      rowsTitle: hasPaidDeposit
+        ? "Detalle de tu reserva y comprobante de pago"
+        : "Detalle de tu salida",
       rows: [
-        { label: "Código", value: enrollment.bookingCode, highlight: true },
+        { label: "Código de reserva", value: enrollment.bookingCode, highlight: true },
         { label: "Fecha", value: departure.date, highlight: true },
         { label: "Horario", value: scheduleStr },
         { label: "Río / Destino", value: departure.destination },
         { label: "Modalidad", value: departure.experienceType },
         {
-          label: "Pescadores",
-          value: `${enrollment.participantsCount} persona(s)`,
+          label: "Lugares reservados",
+          value: `${enrollment.participantsCount} de ${departure.maxParticipants} cupo(s)`,
         },
+        ...clientPaymentRows,
       ],
-      ctaButton: waToGuide
-        ? {
-            label: "Hablar con el guía por WhatsApp",
-            url: waToGuide,
-            bgColor: "#263D32",
-          }
-        : undefined,
       secondaryNote:
-        "Podés responder directamente a este correo o escribirnos por WhatsApp ante cualquier consulta.",
+        "Este correo electrónico es tu comprobante oficial. Ante cualquier consulta sobre el punto de encuentro o equipamiento, podés responder directamente a este mensaje.",
       settings,
     });
 

@@ -2,6 +2,8 @@
 
 import React, { useState, useEffect } from "react";
 import {
+  CalendarDeparture,
+  EnrollmentPaymentReceipt,
   ExperienceItem,
   ExperienceModality,
   PaymentConfig,
@@ -9,6 +11,13 @@ import {
   ServiceFeatureItem,
   SiteSettings,
 } from "@/types/traum";
+import CardCheckoutBox from "@/components/CardCheckoutBox";
+import {
+  CardCheckoutInput,
+  calculateDepartureBookingPricing,
+  formatArs,
+  validateCardCheckoutInput,
+} from "@/lib/payment-utils";
 import {
   X,
   CheckCircle2,
@@ -38,6 +47,7 @@ interface BookingModalProps {
   paymentConfig: PaymentConfig;
   experiences: ExperienceItem[];
   services: ServiceFeatureItem[];
+  departures?: CalendarDeparture[];
   prefillData?: BookingPrefillData | null;
   onBookingCreated?: () => void;
 }
@@ -45,6 +55,9 @@ interface BookingModalProps {
 export default function BookingModal({
   isOpen,
   onClose,
+  paymentConfig,
+  experiences,
+  departures = [],
   prefillData,
   onBookingCreated,
 }: BookingModalProps) {
@@ -60,12 +73,22 @@ export default function BookingModal({
   const [participantsCount, setParticipantsCount] = useState(2);
   const [comments, setComments] = useState("");
   const [honeypot, setHoneypot] = useState("");
+  const [cardInput, setCardInput] = useState<CardCheckoutInput>({
+    cardNumber: "",
+    cardHolder: "",
+    cardExpiry: "",
+    cardCvv: "",
+    postalCode: "",
+    dni: "",
+  });
 
   const [submitting, setSubmitting] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [resultCode, setResultCode] = useState("");
   const [resultStatus, setResultStatus] = useState("");
   const [resultMessage, setResultMessage] = useState("");
+  const [resultReceipt, setResultReceipt] =
+    useState<EnrollmentPaymentReceipt | null>(null);
   const [waitlistOffered, setWaitlistOffered] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
 
@@ -84,12 +107,29 @@ export default function BookingModal({
     }
     setSubmitted(false);
     setWaitlistOffered(false);
+    setResultReceipt(null);
     setErrorMsg("");
   }, [prefillData, isOpen]);
 
   if (!isOpen) return null;
 
   const isScheduled = Boolean(departureId);
+  const selectedDep = isScheduled
+    ? departures.find((d) => d.id === departureId)
+    : undefined;
+  const scheduledNeedsWaitlist =
+    isScheduled &&
+    (waitlistOffered ||
+      (selectedDep ? selectedDep.availableSpots < participantsCount : false));
+  const scheduledPricing =
+    isScheduled && selectedDep
+      ? calculateDepartureBookingPricing(
+          selectedDep,
+          participantsCount,
+          experiences,
+          paymentConfig
+        )
+      : null;
 
   const handleSubmit = async (
     e: React.FormEvent,
@@ -111,6 +151,20 @@ export default function BookingModal({
       return;
     }
 
+    const requiresCardPayment =
+      isScheduled && !acceptWaitlistFlag && !scheduledNeedsWaitlist;
+
+    if (requiresCardPayment) {
+      const cardValidation = validateCardCheckoutInput(cardInput);
+      if (!cardValidation.valid) {
+        setErrorMsg(
+          cardValidation.error ||
+            "Verificá los datos de la tarjeta para abonar la seña."
+        );
+        return;
+      }
+    }
+
     setSubmitting(true);
     try {
       const bodyPayload = isScheduled
@@ -122,7 +176,8 @@ export default function BookingModal({
             email: email.trim(),
             participantsCount,
             comments: comments.trim(),
-            acceptWaitlist: acceptWaitlistFlag,
+            acceptWaitlist: acceptWaitlistFlag || scheduledNeedsWaitlist,
+            cardCheckout: requiresCardPayment ? cardInput : undefined,
             website_hp: honeypot,
           }
         : {
@@ -159,14 +214,16 @@ export default function BookingModal({
       if (isScheduled && data.enrollment) {
         setResultCode(data.enrollment.bookingCode);
         setResultStatus(data.enrollment.status);
+        setResultReceipt(data.enrollment.paymentReceipt || null);
         setResultMessage(
           data.enrollment.status === "lista_espera"
             ? "Quedaste anotado en la lista de espera. Si se libera un cupo, el guía te va a avisar de inmediato."
-            : "¡Tu anotación en la salida programada quedó confirmada!"
+            : "¡Seña abonada y turno confirmado! Enviamos el Comprobante Oficial de Reserva y Pago a tu correo electrónico."
         );
       } else if (data.customRequest) {
         setResultCode(data.customRequest.requestCode);
         setResultStatus("pendiente");
+        setResultReceipt(null);
         setResultMessage(
           data.confirmationMessage ||
             "El guía te va a contactar para coordinar. No se requiere seña ni pago por este medio."
@@ -253,6 +310,31 @@ export default function BookingModal({
                 <div>
                   <strong>Personas:</strong> {participantsCount}
                 </div>
+                {resultReceipt && (
+                  <div className="pt-3 mt-2 border-t border-[#D8CEB9] space-y-1">
+                    <div className="text-[10px] uppercase tracking-[0.18em] text-[#263D32] font-bold">
+                      Comprobante Oficial · Op. #{resultReceipt.paymentId}
+                    </div>
+                    <div className="flex justify-between">
+                      <span>Total de tus cupos:</span>
+                      <span>{formatArs(resultReceipt.subtotalForSpots)}</span>
+                    </div>
+                    <div className="flex justify-between text-[#746657]">
+                      <span>
+                        Saldo restante el día de la salida (-
+                        {100 - resultReceipt.depositPercentage}%):
+                      </span>
+                      <span>- {formatArs(resultReceipt.remainingBalance)}</span>
+                    </div>
+                    <div className="flex justify-between font-bold text-[#263D32] pt-1 border-t border-[#D8CEB9]/60">
+                      <span>
+                        Seña abonada hoy ({resultReceipt.cardBrand} ****{" "}
+                        {resultReceipt.cardLast4}):
+                      </span>
+                      <span>{formatArs(resultReceipt.depositPaid)}</span>
+                    </div>
+                  </div>
+                )}
               </div>
 
               <button
@@ -436,6 +518,15 @@ export default function BookingModal({
                 />
               </div>
 
+              {isScheduled && !scheduledNeedsWaitlist && scheduledPricing && (
+                <CardCheckoutBox
+                  pricing={scheduledPricing}
+                  cardInput={cardInput}
+                  onChange={setCardInput}
+                  variant="light"
+                />
+              )}
+
               {errorMsg && (
                 <div className="p-3 bg-[#B35B2B]/10 border border-[#B35B2B] text-xs text-[#B35B2B] flex items-center gap-2">
                   <AlertCircle className="w-4 h-4 flex-shrink-0" />
@@ -452,7 +543,7 @@ export default function BookingModal({
                 >
                   {submitting
                     ? "Procesando..."
-                    : "Confirmar ingreso en Lista de Espera"}
+                    : "Confirmar ingreso en Lista de Espera (Sin cargo)"}
                 </button>
               ) : (
                 <button
@@ -465,7 +556,13 @@ export default function BookingModal({
                     {submitting
                       ? "Procesando..."
                       : isScheduled
-                      ? "Confirmar Anotación"
+                      ? scheduledNeedsWaitlist
+                        ? "Anotarme en Lista de Espera (Sin cargo)"
+                        : scheduledPricing
+                        ? `Pagar Seña (${formatArs(
+                            scheduledPricing.depositAmount
+                          )}) y Confirmar Reserva`
+                        : "Confirmar Anotación"
                       : "Enviar Solicitud Personalizada"}
                   </span>
                 </button>

@@ -51,10 +51,17 @@ export default function TraumLandingClient({
     }
   }, []);
 
-  // Real-time live synchronization for all visitors
+  // Real-time live synchronization for all visitors (30s interval when visible)
   useEffect(() => {
     syncLiveStore();
-    const interval = setInterval(syncLiveStore, 4000);
+    const interval = setInterval(() => {
+      if (
+        typeof document === "undefined" ||
+        document.visibilityState === "visible"
+      ) {
+        syncLiveStore();
+      }
+    }, 30000);
 
     const handleVisibility = () => {
       if (document.visibilityState === "visible") {
@@ -163,6 +170,8 @@ export default function TraumLandingClient({
             departures={store.departures}
             blockedDays={store.blockedDays}
             destinations={store.destinations}
+            experiences={store.experiences}
+            paymentConfig={store.paymentConfig}
             onDataChanged={notifyLiveChange}
             onRequestBookingFromCalendar={(prefill) =>
               handleOpenBookingModal({
@@ -211,7 +220,7 @@ export default function TraumLandingClient({
       {/* K. FOOTER */}
       <Footer settings={store.settings} />
 
-      {/* BOOKING MODAL (PASO 1 DATOS + LEGAL -> PASO 2 SEÑA Y ALIAS SIN CBU) */}
+      {/* BOOKING MODAL (PASO 1 DATOS + TARJETA -> PASO 2 COMPROBANTE) */}
       <BookingModal
         isOpen={bookingModalOpen}
         onClose={() => setBookingModalOpen(false)}
@@ -219,6 +228,7 @@ export default function TraumLandingClient({
         paymentConfig={store.paymentConfig}
         experiences={store.experiences}
         services={store.services}
+        departures={store.departures}
         prefillData={bookingPrefill}
         onBookingCreated={notifyLiveChange}
       />

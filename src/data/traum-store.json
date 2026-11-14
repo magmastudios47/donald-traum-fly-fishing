@@ -36,22 +36,24 @@
   },
   "paymentConfig": {
     "enabled": true,
-    "title": "Medios de Pago y Reserva con Seña",
-    "subtitle": "Transparencia y respaldo comercial para asegurar tu fecha en la Patagonia",
+    "title": "Reserva Online con Tarjeta (Seña)",
+    "subtitle": "Transparencia y confirmación inmediata para asegurar tu fecha en las Salidas Programadas",
     "depositPercentage": 30,
+    "defaultDepartureTotalPrice": 160000,
     "acceptedMethods": [
-      "Transferencia Bancaria (Pesos ARS / USD)",
-      "Mercado Pago (Tarjetas de crédito, débito y dinero en cuenta)",
-      "Efectivo presencial en Junín de los Andes",
-      "Pagos internacionales (PayPal / Wise / Dólar billete)"
+      "Tarjeta de Crédito o Débito directo en la página (Visa, Mastercard, Cabal, Amex)",
+      "Procesamiento seguro compatible con Mercado Pago Checkout Transparente",
+      "Saldo restante (70%) abonado el día de la salida en efectivo o transferencia"
     ],
     "bankName": "Banco Provincia del Neuquén / Banco Galicia",
     "bankAlias": "TRAUM.FLY.PATAGONIA",
     "bankCbu": "",
-    "bankHolder": "ELUEN MORALES— TRAUM FLY FISHING",
+    "bankHolder": "ELUEN MORALES — TRAUM FLY FISHING",
     "mercadoPagoLink": "",
+    "mercadoPagoPublicKey": "",
+    "mercadoPagoAccessToken": "",
     "internationalPaymentLink": "",
-    "cancellationNotice": "Las reservas se bloquean en el calendario mediante la integración del porcentaje de seña indicado y el saldo restante se abona previo al inicio de la salida. Los datos bancarios (Alias y Titular) y links de pago se habilitan automáticamente al contratar cualquiera de los servicios cargados en la página."
+    "cancellationNotice": "Las salidas programadas se confirman de forma inmediata abonando la seña con tarjeta desde esta misma página. Las solicitudes de salidas a pedido y la lista de espera se coordinan directamente con el guía sin cobro anticipado en la web."
   },
   "experiences": [
     {
@@ -66,7 +68,9 @@
         "Lectura detallada de aguas, entomología local y selección de moscas",
         "Ritmo pausado y personalizado adaptado a la técnica del pescador"
       ],
-      "priceLabel": "Tarifa según cantidad de jornadas y participantes",
+      "priceLabel": "Tarifa base $120.000 total salida · Seña 30% online",
+      "basePrice": 120000,
+      "defaultDepositPercentage": 30,
       "description": "Una experiencia de pesca caminando por las orillas y dentro de los ríos, explorando sectores cuidadosamente seleccionados.",
       "paymentLink": "",
       "capacityPlaceholder": "1 a 2 pescadores por guía",
@@ -85,7 +89,9 @@
         "Alcance a tramos exclusivos lejos de los accesos públicos convencionales",
         "Combinación dinámica de pesca desde la balsa y vadeo en puntos clave"
       ],
-      "priceLabel": "Flotada guiada · Consultar tarifa vigente por balsa",
+      "priceLabel": "Tarifa base $180.000 total balsa · Seña 30% online",
+      "basePrice": 180000,
+      "defaultDepositPercentage": 30,
       "description": "Recorridos por ríos patagónicos a bordo de balsas preparadas para jornadas de pesca.",
       "paymentLink": "",
       "capacityPlaceholder": "Hasta 2 pescadores por embarcación",
@@ -104,7 +110,9 @@
         "Programas de múltiples días combinando distintos ambientes del Neuquén",
         "Salidas privadas individuales, para dos personas o grupos a medida"
       ],
-      "priceLabel": "Cotización personalizada según itinerario",
+      "priceLabel": "Tarifa base $200.000 jornada a medida",
+      "basePrice": 200000,
+      "defaultDepositPercentage": 30,
       "description": "Experiencias diseñadas según el nivel, los objetivos y las preferencias de cada pescador.",
       "paymentLink": "",
       "capacityPlaceholder": "Individual, Dúo o Grupal",
@@ -373,7 +381,7 @@
   "departures": [
     {
       "id": "dep-1",
-      "date": "2026-11-12",
+      "date": "2026-11-28",
       "isDemo": false,
       "status": "activa",
       "endTime": "17:30",
@@ -385,6 +393,9 @@
       "availableSpots": 1,
       "experienceType": "Pesca de vadeo",
       "maxParticipants": 2,
+      "totalPrice": 120000,
+      "depositPercentage": 30,
+      "priceDisplayMode": "per_person",
       "serviceGroupType": "Salida para dos personas"
     },
     {
@@ -401,6 +412,9 @@
       "availableSpots": 2,
       "experienceType": "Pesca en balsa",
       "maxParticipants": 2,
+      "totalPrice": 180000,
+      "depositPercentage": 30,
+      "priceDisplayMode": "per_person",
       "serviceGroupType": "Salida para dos personas"
     },
     {
@@ -416,6 +430,9 @@
       "availableSpots": 2,
       "experienceType": "Pesca de vadeo",
       "maxParticipants": 2,
+      "totalPrice": 120000,
+      "depositPercentage": 30,
+      "priceDisplayMode": "per_person",
       "serviceGroupType": "Salida para dos personas"
     },
     {
@@ -432,6 +449,9 @@
       "availableSpots": 2,
       "experienceType": "Salida personalizada",
       "maxParticipants": 2,
+      "totalPrice": 200000,
+      "depositPercentage": 30,
+      "priceDisplayMode": "total",
       "serviceGroupType": "Salida privada o personalizada"
     }
   ],
@@ -448,19 +468,6 @@
       "departureId": "dep-1",
       "normalizedPhone": "2972505908",
       "participantsCount": 1
-    },
-    {
-      "id": "enr-1794000263267-798",
-      "email": "oniichanananan@gamil.com",
-      "status": "confirmada",
-      "comments": "quiero que me hagas un petardoi",
-      "fullName": "roni",
-      "whatsapp": "+549297825543",
-      "createdAt": "2026-11-06T21:24:23.267Z",
-      "bookingCode": "TRM-9774",
-      "departureId": "dep-1794000263267-952",
-      "normalizedPhone": "9297825543",
-      "participantsCount": 2
     }
   ],
   "customRequests": [
@@ -625,29 +632,6 @@
       "preferredSchedule": "Todo el día",
       "preferredRiver": "Rio caleufu",
       "customRequestStatus": "pendiente"
-    },
-    {
-      "id": "enr-1794000263267-798",
-      "bookingCode": "TRM-9774",
-      "createdAt": "2026-11-06T21:24:23.267Z",
-      "fullName": "roni",
-      "email": "oniichanananan@gamil.com",
-      "whatsapp": "+549297825543",
-      "desiredDate": "Salida programada",
-      "departureId": "dep-1794000263267-952",
-      "requiresDeposit": false,
-      "spotsReleased": false,
-      "selectedServiceTitle": "Salida programada",
-      "experienceType": "Pesca en balsa",
-      "serviceGroupType": "Salida para dos personas",
-      "participantsCount": 2,
-      "skillLevel": "Intermedio",
-      "comments": "quiero que me hagas un petardoi",
-      "legalAccepted": true,
-      "legalAcceptedAt": "2026-11-06T21:24:23.267Z",
-      "legalVersion": "v2026.11-AR",
-      "status": "Confirmado",
-      "enrollmentStatus": "confirmada"
     },
     {
       "id": "inq-1793812467201",

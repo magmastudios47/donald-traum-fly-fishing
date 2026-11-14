@@ -9,6 +9,7 @@ import {
   CookieConsentRecord,
   CustomTripRequest,
   DepartureEnrollment,
+  EmailLogItem,
   TraumStoreData,
   WaitlistPromotionAlert,
 } from "@/types/traum";
@@ -58,14 +59,39 @@ export function recalculateStoreConsistentState(
 ): TraumStoreData {
   const rawDepartures: CalendarDeparture[] = (
     store.departures || initialTraumData.departures
-  ).map((dep) => ({
-    ...dep,
-    startTime: dep.startTime || "08:00",
-    endTime: dep.endTime || "17:30",
-    status: dep.status === "cancelada" ? "cancelada" : "activa",
-    maxParticipants: Math.max(1, Number(dep.maxParticipants) || 2),
-    availableSpots: Math.max(0, Number(dep.availableSpots ?? dep.maxParticipants) || 0),
-  }));
+  ).map((dep) => {
+    const matchingExp = (
+      store.experiences || initialTraumData.experiences
+    ).find((e) => e.modality === dep.experienceType);
+    const fallbackTotal =
+      Number(matchingExp?.basePrice) ||
+      Number(store.paymentConfig?.defaultDepartureTotalPrice) ||
+      120000;
+    const fallbackDepositPct =
+      Number(matchingExp?.defaultDepositPercentage) ||
+      Number(store.paymentConfig?.depositPercentage) ||
+      30;
+
+    return {
+      ...dep,
+      startTime: dep.startTime || "08:00",
+      endTime: dep.endTime || "17:30",
+      status: dep.status === "cancelada" ? "cancelada" : "activa",
+      maxParticipants: Math.max(1, Number(dep.maxParticipants) || 2),
+      availableSpots: Math.max(
+        0,
+        Number(dep.availableSpots ?? dep.maxParticipants) || 0
+      ),
+      totalPrice:
+        Number(dep.totalPrice) > 0 ? Number(dep.totalPrice) : fallbackTotal,
+      depositPercentage:
+        Number(dep.depositPercentage) > 0
+          ? Math.min(100, Math.max(1, Number(dep.depositPercentage)))
+          : fallbackDepositPct,
+      priceDisplayMode:
+        dep.priceDisplayMode === "total" ? "total" : "per_person",
+    };
+  });
 
   // Fuente única de verdad: enrollments y customRequests (sin re-inyectar desde inquiries borradas)
   const existingEnrollments: DepartureEnrollment[] = [...(store.enrollments || [])];
@@ -251,12 +277,59 @@ function normalizeStore(
     ? [...parsed.gallery].sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
     : initialTraumData.gallery;
 
+  const officialExpByModality = new Map(
+    initialTraumData.experiences.map((e) => [e.modality, e])
+  );
+  const normalizedExperiences = (
+    parsed.experiences || initialTraumData.experiences
+  ).map((exp) => {
+    const officialExp = officialExpByModality.get(exp.modality);
+    return {
+      ...exp,
+      basePrice:
+        Number(exp.basePrice) > 0
+          ? Number(exp.basePrice)
+          : Number(officialExp?.basePrice) || 120000,
+      defaultDepositPercentage:
+        Number(exp.defaultDepositPercentage) > 0
+          ? Math.min(100, Math.max(1, Number(exp.defaultDepositPercentage)))
+          : Number(officialExp?.defaultDepositPercentage) ||
+            Number(parsed.paymentConfig?.depositPercentage) ||
+            30,
+    };
+  });
+
+  const mergedPaymentConfig = {
+    ...initialTraumData.paymentConfig,
+    ...(parsed.paymentConfig || {}),
+    depositPercentage: Math.min(
+      100,
+      Math.max(
+        1,
+        Number(
+          parsed.paymentConfig?.depositPercentage ??
+            initialTraumData.paymentConfig.depositPercentage
+        ) || 30
+      )
+    ),
+    defaultDepartureTotalPrice:
+      Number(parsed.paymentConfig?.defaultDepartureTotalPrice) > 0
+        ? Number(parsed.paymentConfig?.defaultDepartureTotalPrice)
+        : initialTraumData.paymentConfig.defaultDepartureTotalPrice || 120000,
+  };
+  mergedPaymentConfig.mercadoPagoTokenConfigured = Boolean(
+    mergedPaymentConfig.mercadoPagoAccessToken?.trim() ||
+      process.env.MP_ACCESS_TOKEN ||
+      process.env.MERCADOPAGO_ACCESS_TOKEN
+  );
+
   const base: TraumStoreData = {
     ...initialTraumData,
     ...parsed,
     version: version ?? parsed.version ?? initialTraumData.version ?? 1,
     updatedAt: updatedAt ?? parsed.updatedAt ?? new Date().toISOString(),
     settings: mergedSettings,
+    experiences: normalizedExperiences,
     destinations: normalizedDestinations,
     gallery: normalizedGallery,
     emailLogs: Array.isArray(parsed.emailLogs)
@@ -266,10 +339,7 @@ function normalizeStore(
       ...initialTraumData.siteImages,
       ...(parsed.siteImages || {}),
     },
-    paymentConfig: {
-      ...initialTraumData.paymentConfig,
-      ...(parsed.paymentConfig || {}),
-    },
+    paymentConfig: mergedPaymentConfig,
     departures: parsed.departures || initialTraumData.departures,
     enrollments: parsed.enrollments || [],
     customRequests: parsed.customRequests || [],
@@ -284,28 +354,33 @@ function normalizeStore(
   return recalculateStoreConsistentState(base);
 }
 
+let tablesInitialized = false;
+
 async function ensureTables() {
   const sql = neon(NEON_DATABASE_URL);
-  await sql.query(`
-    CREATE TABLE IF NOT EXISTS traum_site_store (
-      id integer PRIMARY KEY DEFAULT 1,
-      content jsonb NOT NULL DEFAULT '{}'::jsonb,
-      version bigint NOT NULL DEFAULT 1,
-      updated_at timestamptz DEFAULT now()
-    )
-  `);
-  await sql.query(`
-    CREATE TABLE IF NOT EXISTS traum_cookie_consents (
-      id text PRIMARY KEY,
-      visitor_id text NOT NULL,
-      decision text NOT NULL,
-      preferences jsonb NOT NULL DEFAULT '{}'::jsonb,
-      google_email text,
-      user_agent text,
-      created_at timestamptz DEFAULT now(),
-      updated_at timestamptz DEFAULT now()
-    )
-  `);
+  if (!tablesInitialized) {
+    await sql.query(`
+      CREATE TABLE IF NOT EXISTS traum_site_store (
+        id integer PRIMARY KEY DEFAULT 1,
+        content jsonb NOT NULL DEFAULT '{}'::jsonb,
+        version bigint NOT NULL DEFAULT 1,
+        updated_at timestamptz DEFAULT now()
+      )
+    `);
+    await sql.query(`
+      CREATE TABLE IF NOT EXISTS traum_cookie_consents (
+        id text PRIMARY KEY,
+        visitor_id text NOT NULL,
+        decision text NOT NULL,
+        preferences jsonb NOT NULL DEFAULT '{}'::jsonb,
+        google_email text,
+        user_agent text,
+        created_at timestamptz DEFAULT now(),
+        updated_at timestamptz DEFAULT now()
+      )
+    `);
+    tablesInitialized = true;
+  }
   return sql;
 }
 
@@ -507,6 +582,19 @@ export async function saveTraumStore(
   }
 
   return normalized;
+}
+
+export async function appendEmailLogSafely(
+  logEntry: EmailLogItem
+): Promise<TraumStoreData> {
+  const { store } = await runStoreTransaction(async (current) => ({
+    nextStore: {
+      ...current,
+      emailLogs: [logEntry, ...(current.emailLogs || [])].slice(0, 60),
+    },
+    result: null,
+  }));
+  return store;
 }
 
 export async function saveCookieConsentToDb(

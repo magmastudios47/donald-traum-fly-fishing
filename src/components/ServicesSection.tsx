@@ -125,25 +125,24 @@ export default function ServicesSection({
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
                 <div className="p-4 bg-[#292D29]/50 border border-[#899487]/25 space-y-2">
                   <div className="flex items-center gap-2 text-[#D8CEB9] font-semibold text-xs uppercase tracking-wider">
-                    <CheckCircle2 className="w-4 h-4 flex-shrink-0" />
-                    <span>A) Salidas Programadas</span>
+                    <CreditCard className="w-4 h-4 flex-shrink-0" />
+                    <span>A) Salidas Programadas (Seña Online)</span>
                   </div>
                   <p className="text-xs text-[#F2EFE6]/85 font-light leading-relaxed">
-                    El guía publica fecha, horario, río, tipo de pesca y cupos.
-                    Te anotás directo y si el cupo se llena podés sumarte a la
-                    lista de espera.
+                    El guía publica fecha, horario, río, modalidad, cupos y
+                    valor. Reservás tus cupos abonando la seña ({paymentConfig?.depositPercentage || 30}%) con tarjeta directo en la página y recibís tu comprobante oficial en el acto, sin mandar comprobantes por WhatsApp.
                   </p>
                 </div>
 
                 <div className="p-4 bg-[#292D29]/50 border border-[#899487]/25 space-y-2">
                   <div className="flex items-center gap-2 text-[#D8CEB9] font-semibold text-xs uppercase tracking-wider">
                     <CheckCircle2 className="w-4 h-4 flex-shrink-0" />
-                    <span>B) Salidas a Pedido</span>
+                    <span>B) Salidas a Pedido (Sin pago web)</span>
                   </div>
                   <p className="text-xs text-[#F2EFE6]/85 font-light leading-relaxed">
                     En cualquier fecha libre del calendario podés solicitar una
-                    salida personalizada. El guía la revisa y lo coordinan
-                    directamente entre ustedes, sin señas ni pagos en la web.
+                    salida personalizada. El guía recibe tu pedido y lo coordinan
+                    directamente entre ustedes, sin cobro de seña en la página.
                   </p>
                 </div>
               </div>
@@ -154,15 +153,17 @@ export default function ServicesSection({
                 <div className="flex items-center gap-2.5">
                   <ShieldCheck className="w-4 h-4 text-[#D8CEB9]" />
                   <span className="text-xs uppercase tracking-[0.2em] text-[#D8CEB9] font-semibold">
-                    Trato Directo con el Guía
+                    Confirmación Instantánea y Segura
                   </span>
                 </div>
+                <Lock className="w-3.5 h-3.5 text-[#899487]" />
               </div>
 
               <p className="text-xs sm:text-sm text-[#F2EFE6]/85 font-light leading-relaxed">
-                Sin cuentas obligatorias ni pasarelas intermedias: dejás tu
-                nombre, teléfono/WhatsApp y correo electrónico para recibir la
-                confirmación de tu anotación o coordinar tu salida personalizada.
+                En las salidas programadas, el sistema calcula automáticamente el
+                valor de los cupos que elijas, descuenta el saldo a pagar el día
+                de la salida y procesa la seña con tarjeta de crédito o débito
+                sin guardar los datos de tu tarjeta.
               </p>
 
               <div className="pt-2">

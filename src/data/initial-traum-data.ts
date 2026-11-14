@@ -53,24 +53,26 @@ export const initialTraumData: TraumStoreData = {
   },
   paymentConfig: {
     enabled: true,
-    title: "Medios de Pago y Reserva con Seña",
+    title: "Pago de Seña Online con Tarjeta (Salidas Programadas)",
     subtitle:
-      "Transparencia y respaldo comercial para asegurar tu fecha en la Patagonia",
+      "Confirmación inmediata en la página sin enviar comprobantes por WhatsApp",
     depositPercentage: 30,
+    defaultDepartureTotalPrice: 120000,
     acceptedMethods: [
-      "Transferencia Bancaria (Pesos ARS / USD)",
-      "Mercado Pago (Tarjetas de crédito, débito y dinero en cuenta)",
-      "Efectivo presencial en Junín de los Andes",
-      "Pagos internacionales (PayPal / Wise / Dólar billete)",
+      "Tarjeta de Crédito y Débito en la página (Checkout Transparente)",
+      "Mercado Pago (Acreditación instantánea)",
+      "Saldo restante (70%) abonado el día de la salida",
     ],
     bankName: "Banco Provincia del Neuquén / Banco Galicia",
     bankAlias: "TRAUM.FLY.PATAGONIA",
     bankCbu: "",
-    bankHolder: "DONALD TRAUM — TRAUM FLY FISHING",
+    bankHolder: "ELUEN MORALES — TRAUM FLY FISHING",
     mercadoPagoLink: "",
     internationalPaymentLink: "",
+    mercadoPagoPublicKey: "",
+    mercadoPagoAccessToken: "",
     cancellationNotice:
-      "Las reservas se bloquean en el calendario mediante la integración del porcentaje de seña indicado y el saldo restante se abona previo al inicio de la salida. Los datos bancarios (Alias y Titular) y links de pago se habilitan automáticamente al contratar cualquiera de los servicios cargados en la página.",
+      "En las Salidas Programadas solo se abona en la página el porcentaje de seña correspondiente a los cupos que reserves, y el saldo restante se abona el día de la salida. Las Salidas a Pedido se coordinan directamente con el guía.",
   },
   experiences: [
     {
@@ -94,6 +96,8 @@ export const initialTraumData: TraumStoreData = {
       capacityPlaceholder: "1 a 2 pescadores por guía",
       priceLabel: "Tarifa según cantidad de jornadas y participantes",
       paymentLink: "",
+      basePrice: 100000,
+      defaultDepositPercentage: 30,
     },
     {
       id: "exp-balsa",
@@ -116,6 +120,8 @@ export const initialTraumData: TraumStoreData = {
       capacityPlaceholder: "Hasta 2 pescadores por embarcación",
       priceLabel: "Flotada guiada · Consultar tarifa vigente por balsa",
       paymentLink: "",
+      basePrice: 160000,
+      defaultDepositPercentage: 30,
     },
     {
       id: "exp-personalizada",
@@ -138,6 +144,8 @@ export const initialTraumData: TraumStoreData = {
       capacityPlaceholder: "Individual, Dúo o Grupal",
       priceLabel: "Cotización personalizada según itinerario",
       paymentLink: "",
+      basePrice: 120000,
+      defaultDepositPercentage: 30,
     },
   ],
   destinations: [
@@ -387,7 +395,7 @@ export const initialTraumData: TraumStoreData = {
   departures: [
     {
       id: "dep-1",
-      date: "2026-11-12",
+      date: "2026-11-16",
       startTime: "08:00",
       endTime: "17:00",
       destination: "Río Malleo — Sector Medio",
@@ -400,6 +408,9 @@ export const initialTraumData: TraumStoreData = {
         "Jornada enfocada en pesca con mosca seca y ninfas livianas en aguas bajas y cristalinas.",
       status: "activa",
       isDemo: false,
+      totalPrice: 100000,
+      depositPercentage: 30,
+      priceDisplayMode: "per_person",
     },
     {
       id: "dep-2",
@@ -416,6 +427,9 @@ export const initialTraumData: TraumStoreData = {
         "Recorrido en balsa combinando deriva sobre barrancas y paradas de vadeo en correderas.",
       status: "activa",
       isDemo: false,
+      totalPrice: 160000,
+      depositPercentage: 30,
+      priceDisplayMode: "per_person",
     },
     {
       id: "dep-3",
@@ -432,6 +446,9 @@ export const initialTraumData: TraumStoreData = {
         "Salida coordinada con dos embarcaciones por los brazos e islas del Collón Curá.",
       status: "activa",
       isDemo: false,
+      totalPrice: 160000,
+      depositPercentage: 30,
+      priceDisplayMode: "total",
     },
     {
       id: "dep-4",
@@ -448,6 +465,9 @@ export const initialTraumData: TraumStoreData = {
         "Fecha programada para diseñar una experiencia a medida según nivel y preferencias del pescador.",
       status: "activa",
       isDemo: false,
+      totalPrice: 120000,
+      depositPercentage: 30,
+      priceDisplayMode: "per_person",
     },
   ],
   enrollments: [],

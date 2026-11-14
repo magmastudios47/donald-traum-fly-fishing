@@ -7,9 +7,18 @@ import {
   CustomTripRequest,
   DepartureEnrollment,
   DestinationItem,
+  ExperienceItem,
   ExperienceModality,
+  PaymentConfig,
   PreferredScheduleType,
 } from "@/types/traum";
+import CardCheckoutBox from "@/components/CardCheckoutBox";
+import {
+  CardCheckoutInput,
+  calculateDepartureBookingPricing,
+  formatArs,
+  validateCardCheckoutInput,
+} from "@/lib/payment-utils";
 import {
   ChevronLeft,
   ChevronRight,
@@ -23,12 +32,15 @@ import {
   Ban,
   Filter,
   RotateCcw,
+  CreditCard,
 } from "lucide-react";
 
 interface CalendarSectionProps {
   departures: CalendarDeparture[];
   blockedDays?: BlockedDay[];
   destinations?: DestinationItem[];
+  experiences?: ExperienceItem[];
+  paymentConfig?: PaymentConfig;
   onDataChanged?: () => void;
   onRequestBookingFromCalendar?: (prefill: {
     date: string;
@@ -87,6 +99,8 @@ export default function CalendarSection({
   departures,
   blockedDays = [],
   destinations = [],
+  experiences = [],
+  paymentConfig,
   onDataChanged,
 }: CalendarSectionProps) {
   const [todayAR, setTodayAR] = useState<string>("2026-11-05");
@@ -111,6 +125,14 @@ export default function CalendarSection({
   const [enrollHoneypot, setEnrollHoneypot] = useState("");
   const [enrollSubmitting, setEnrollSubmitting] = useState(false);
   const [enrollError, setEnrollError] = useState("");
+  const [cardInput, setCardInput] = useState<CardCheckoutInput>({
+    cardNumber: "",
+    cardHolder: "",
+    cardExpiry: "",
+    cardCvv: "",
+    postalCode: "",
+    dni: "",
+  });
   const [waitlistPrompt, setWaitlistPrompt] = useState<{
     availableSpots: number;
     requestedSpots: number;
@@ -318,6 +340,22 @@ export default function CalendarSection({
       return;
     }
 
+    const requiresCardPayment =
+      !acceptWaitlistFlag &&
+      departure.availableSpots >= enrollCount &&
+      departure.availableSpots > 0;
+
+    if (requiresCardPayment) {
+      const cardValidation = validateCardCheckoutInput(cardInput);
+      if (!cardValidation.valid) {
+        setEnrollError(
+          cardValidation.error ||
+            "Verificá los datos de la tarjeta para abonar la seña."
+        );
+        return;
+      }
+    }
+
     setEnrollSubmitting(true);
     try {
       const res = await fetch("/api/traum", {
@@ -332,6 +370,7 @@ export default function CalendarSection({
           participantsCount: enrollCount,
           comments: enrollComments.trim(),
           acceptWaitlist: acceptWaitlistFlag,
+          cardCheckout: requiresCardPayment ? cardInput : undefined,
           website_hp: enrollHoneypot,
         }),
       });
@@ -353,6 +392,14 @@ export default function CalendarSection({
       setConfirmedEnrollment({
         enrollment: data.enrollment,
         departure: data.departure || departure,
+      });
+      setCardInput({
+        cardNumber: "",
+        cardHolder: "",
+        cardExpiry: "",
+        cardCvv: "",
+        postalCode: "",
+        dni: "",
       });
       setWaitlistPrompt(null);
       setActiveEnrollmentDepId(null);
@@ -735,23 +782,23 @@ export default function CalendarSection({
 
             {/* Confirmación de Anotación Exitosa */}
             {confirmedEnrollment && (
-              <div className="mb-6 p-5 bg-[#292D29]/80 border border-[#D8CEB9] space-y-3">
+              <div className="mb-6 p-5 bg-[#292D29]/85 border border-[#D8CEB9] space-y-3.5">
                 <div className="flex items-center gap-2 text-[#D8CEB9]">
-                  <CheckCircle2 className="w-5 h-5 flex-shrink-0" />
+                  <CheckCircle2 className="w-5 h-5 flex-shrink-0 text-emerald-400" />
                   <span className="text-xs uppercase tracking-[0.2em] font-semibold">
                     {confirmedEnrollment.enrollment.status === "lista_espera"
                       ? "¡Quedaste anotado en la lista de espera!"
-                      : "¡Tu anotación está confirmada!"}
+                      : "¡Seña abonada y turno confirmado!"}
                   </span>
                 </div>
                 <p className="text-xs text-[#F2EFE6]/90 leading-relaxed">
                   {confirmedEnrollment.enrollment.status === "lista_espera"
-                    ? "Si se libera un lugar en esta salida, el guía te va a contactar de inmediato por WhatsApp o email para confirmar tu ingreso."
-                    : "Tus lugares ya fueron descontados del cupo de la salida y enviamos el resumen a tu correo y al guía."}
+                    ? "Si se libera un lugar en esta salida, el guía te va a contactar de inmediato por WhatsApp o email para confirmar tu ingreso. No se realizó ningún cobro."
+                    : "Tu pago fue procesado en el acto y tus lugares ya fueron descontados del cupo. Enviamos el Comprobante Oficial de Reserva y Pago a tu correo electrónico."}
                 </p>
-                <div className="p-3.5 bg-[#263D32]/90 border border-[#899487]/30 text-xs space-y-1">
+                <div className="p-3.5 bg-[#263D32]/90 border border-[#899487]/30 text-xs space-y-1.5">
                   <div>
-                    <strong>Código:</strong>{" "}
+                    <strong>Código de reserva:</strong>{" "}
                     {confirmedEnrollment.enrollment.bookingCode}
                   </div>
                   <div>
@@ -772,6 +819,60 @@ export default function CalendarSection({
                     {confirmedEnrollment.enrollment.participantsCount} (
                     {confirmedEnrollment.enrollment.fullName})
                   </div>
+                  {confirmedEnrollment.enrollment.paymentReceipt && (
+                    <div className="pt-2.5 mt-2.5 border-t border-[#899487]/35 space-y-1 text-[#D8CEB9]">
+                      <div className="text-[10px] uppercase tracking-[0.18em] text-emerald-300 font-semibold">
+                        Comprobante Oficial · Op. #
+                        {confirmedEnrollment.enrollment.paymentReceipt.paymentId}
+                      </div>
+                      <div className="flex justify-between">
+                        <span>Total de tus cupos:</span>
+                        <span>
+                          {formatArs(
+                            confirmedEnrollment.enrollment.paymentReceipt
+                              .subtotalForSpots
+                          )}
+                        </span>
+                      </div>
+                      <div className="flex justify-between text-[#F2EFE6]/75">
+                        <span>
+                          Saldo restante el día de la salida (-
+                          {100 -
+                            confirmedEnrollment.enrollment.paymentReceipt
+                              .depositPercentage}
+                          %):
+                        </span>
+                        <span>
+                          -{" "}
+                          {formatArs(
+                            confirmedEnrollment.enrollment.paymentReceipt
+                              .remainingBalance
+                          )}
+                        </span>
+                      </div>
+                      <div className="flex justify-between font-bold text-emerald-300 pt-1 border-t border-[#899487]/25">
+                        <span>
+                          Seña abonada hoy (
+                          {
+                            confirmedEnrollment.enrollment.paymentReceipt
+                              .cardBrand
+                          }{" "}
+                          ****{" "}
+                          {
+                            confirmedEnrollment.enrollment.paymentReceipt
+                              .cardLast4
+                          }
+                          ):
+                        </span>
+                        <span>
+                          {formatArs(
+                            confirmedEnrollment.enrollment.paymentReceipt
+                              .depositPaid
+                          )}
+                        </span>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
             )}
@@ -860,6 +961,17 @@ export default function CalendarSection({
                   const isFull = dep.availableSpots <= 0;
                   const isLow = dep.availableSpots > 0 && dep.availableSpots <= 2;
                   const isFormOpen = activeEnrollmentDepId === dep.id;
+                  const pricing = calculateDepartureBookingPricing(
+                    dep,
+                    enrollCount,
+                    experiences,
+                    paymentConfig
+                  );
+                  const displayMode = dep.priceDisplayMode || "per_person";
+                  const needsWaitlist =
+                    isFull ||
+                    enrollCount > dep.availableSpots ||
+                    Boolean(waitlistPrompt);
 
                   return (
                     <div
@@ -936,6 +1048,49 @@ export default function CalendarSection({
                         </div>
                       </div>
 
+                      {/* Tarjeta de Valor y Seña según configuración del guía (por persona o total salida) */}
+                      <div className="p-3.5 bg-[#263D32]/85 border border-[#D8CEB9]/30 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                        <div>
+                          <span className="text-[10px] uppercase tracking-[0.18em] text-[#899487] block">
+                            {displayMode === "total"
+                              ? "Valor total de la salida"
+                              : "Valor por persona / cupo"}
+                          </span>
+                          <div className="text-lg font-editorial text-[#D8CEB9]">
+                            {displayMode === "total"
+                              ? `${formatArs(pricing.totalDeparturePrice)} total (${pricing.maxParticipants} cupos)`
+                              : `${formatArs(pricing.pricePerSpot)} por cupo`}
+                          </div>
+                          <div className="text-[11px] text-[#F2EFE6]/75">
+                            {displayMode === "total"
+                              ? `Equivale a ${formatArs(pricing.pricePerSpot)} por persona`
+                              : `Total de la salida (${pricing.maxParticipants} cupos): ${formatArs(pricing.totalDeparturePrice)}`}
+                          </div>
+                        </div>
+
+                        <div className="sm:text-right border-t sm:border-t-0 pt-2 sm:pt-0 border-[#899487]/25">
+                          <span className="inline-flex items-center gap-1.5 text-[10px] uppercase tracking-[0.16em] text-emerald-300 font-semibold">
+                            <CreditCard className="w-3.5 h-3.5" />
+                            <span>Seña online ({pricing.depositPercentage}%)</span>
+                          </span>
+                          <div className="text-xs text-[#F2EFE6]/90 mt-0.5">
+                            Seña por cupo:{" "}
+                            <strong className="text-[#D8CEB9]">
+                              {formatArs(
+                                Math.round(
+                                  (pricing.pricePerSpot *
+                                    pricing.depositPercentage) /
+                                    100
+                                )
+                              )}
+                            </strong>
+                          </div>
+                          <div className="text-[10px] text-[#899487]">
+                            Resto ({100 - pricing.depositPercentage}%) el día de la salida
+                          </div>
+                        </div>
+                      </div>
+
                       {dep.additionalInfo && (
                         <div className="pt-2 border-t border-[#899487]/20">
                           <span className="text-[10px] uppercase tracking-[0.18em] text-[#899487] block mb-1">
@@ -962,17 +1117,17 @@ export default function CalendarSection({
                           <Compass className="w-4 h-4" />
                           <span>
                             {isFull
-                              ? "Anotarme en lista de espera"
-                              : "Anotarme"}
+                              ? "Anotarme en lista de espera (Sin pago)"
+                              : "Anotarme y abonar seña con tarjeta"}
                           </span>
                         </button>
                       ) : (
                         <div className="pt-4 border-t border-[#D8CEB9]/40 space-y-3.5">
                           <div className="flex items-center justify-between">
                             <span className="text-xs uppercase tracking-[0.2em] text-[#D8CEB9] font-semibold">
-                              {isFull
-                                ? "Formulario de Lista de Espera"
-                                : "Formulario de Anotación"}
+                              {needsWaitlist
+                                ? "Formulario de Lista de Espera (Sin cargo)"
+                                : "Reserva y Pago de Seña Online"}
                             </span>
                             <button
                               type="button"
@@ -1028,7 +1183,7 @@ export default function CalendarSection({
                             </div>
                             <div>
                               <label className="block text-[10px] uppercase tracking-[0.18em] text-[#D8CEB9] mb-1">
-                                Email *
+                                Email (para recibir comprobante) *
                               </label>
                               <input
                                 type="email"
@@ -1043,7 +1198,7 @@ export default function CalendarSection({
 
                           <div>
                             <label className="block text-[10px] uppercase tracking-[0.18em] text-[#D8CEB9] mb-1">
-                              Cantidad de personas *
+                              Cantidad de cupos a reservar *
                             </label>
                             <select
                               value={enrollCount}
@@ -1053,9 +1208,27 @@ export default function CalendarSection({
                               }}
                               className="w-full px-3 py-2 bg-[#263D32] border border-[#899487]/50 text-xs text-[#F2EFE6] focus:outline-none focus:border-[#D8CEB9]"
                             >
-                              {[1, 2, 3, 4, 5, 6].map((n) => (
+                              {Array.from(
+                                {
+                                  length: Math.max(
+                                    2,
+                                    dep.maxParticipants || 4
+                                  ),
+                                },
+                                (_, i) => i + 1
+                              ).map((n) => (
                                 <option key={n} value={n}>
-                                  {n} {n === 1 ? "persona" : "personas"}
+                                  {n} {n === 1 ? "cupo (1 persona)" : `cupos (${n} personas)`}
+                                  {!isFull && n <= dep.availableSpots
+                                    ? ` — Seña ${formatArs(
+                                        Math.round(
+                                          (pricing.pricePerSpot *
+                                            n *
+                                            pricing.depositPercentage) /
+                                            100
+                                        )
+                                      )}`
+                                    : " — Lista de espera"}
                                 </option>
                               ))}
                             </select>
@@ -1076,6 +1249,16 @@ export default function CalendarSection({
                             />
                           </div>
 
+                          {/* Checkout con tarjeta estilo Google Play cuando hay cupos disponibles */}
+                          {!needsWaitlist && (
+                            <CardCheckoutBox
+                              pricing={pricing}
+                              cardInput={cardInput}
+                              onChange={setCardInput}
+                              variant="dark"
+                            />
+                          )}
+
                           {enrollError && (
                             <div className="p-3 bg-red-950/80 border border-red-500/60 text-xs text-red-100 flex items-start gap-2">
                               <AlertCircle className="w-4 h-4 text-red-300 flex-shrink-0 mt-0.5" />
@@ -1092,7 +1275,7 @@ export default function CalendarSection({
                             >
                               {enrollSubmitting
                                 ? "Procesando..."
-                                : "Confirmar ingreso en Lista de Espera"}
+                                : "Confirmar ingreso en Lista de Espera (Sin pago)"}
                             </button>
                           ) : (
                             <button
@@ -1107,10 +1290,14 @@ export default function CalendarSection({
                               className="w-full py-3.5 px-4 bg-[#D8CEB9] hover:bg-[#F2EFE6] text-[#263D32] text-xs uppercase tracking-[0.2em] font-semibold transition-colors cursor-pointer"
                             >
                               {enrollSubmitting
-                                ? "Registrando anotación..."
-                                : isFull || enrollCount > dep.availableSpots
-                                ? "Anotarme en Lista de Espera"
-                                : "Confirmar Anotación"}
+                                ? needsWaitlist
+                                  ? "Registrando en lista de espera..."
+                                  : "Procesando pago de seña y reserva..."
+                                : needsWaitlist
+                                ? "Anotarme en Lista de Espera (Sin cargo)"
+                                : `Pagar Seña (${formatArs(
+                                    pricing.depositAmount
+                                  )}) y Confirmar Reserva`}
                             </button>
                           )}
                         </div>

@@ -9,7 +9,9 @@ import {
   DepartureEnrollment,
   ExperienceModality,
   GalleryImageItem,
+  PriceDisplayMode,
 } from "@/types/traum";
+import { formatArs } from "@/lib/payment-utils";
 import {
   Calendar,
   Inbox,
@@ -43,6 +45,7 @@ import {
   X,
   RefreshCw,
   Sparkles,
+  CreditCard,
 } from "lucide-react";
 
 const ADMIN_MONTH_NAMES = [
@@ -223,6 +226,10 @@ export default function AdminDashboardPage() {
   const [modalStart, setModalStart] = useState("08:00");
   const [modalEnd, setModalEnd] = useState("17:30");
   const [modalSpots, setModalSpots] = useState(2);
+  const [modalTotalPrice, setModalTotalPrice] = useState(180000);
+  const [modalDepositPct, setModalDepositPct] = useState(30);
+  const [modalPriceDisplayMode, setModalPriceDisplayMode] =
+    useState<PriceDisplayMode>("per_person");
   const [modalNotes, setModalNotes] = useState("");
   const [modalRepeatMode, setModalRepeatMode] = useState<
     "none" | "daily" | "weekly"
@@ -266,6 +273,21 @@ export default function AdminDashboardPage() {
     errorDetails?: string;
   } | null>(null);
 
+  const getAdminHeaders = (): Record<string, string> => {
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+    };
+    const savedPin =
+      pinInput.trim() ||
+      (typeof window !== "undefined"
+        ? window.sessionStorage.getItem("traum_admin_pin") || ""
+        : "");
+    if (savedPin) {
+      headers["x-admin-pin"] = savedPin;
+    }
+    return headers;
+  };
+
   const showToast = (text: string, type: "ok" | "err" = "ok") => {
     setBannerMsg({ text, type });
     setTimeout(() => {
@@ -295,10 +317,24 @@ export default function AdminDashboardPage() {
       setCalMonth(m - 1);
     }
 
-    fetch("/api/traum", { cache: "no-store" })
+    const storedPin =
+      typeof window !== "undefined"
+        ? window.sessionStorage.getItem("traum_admin_pin") || ""
+        : "";
+    if (storedPin) {
+      setPinInput(storedPin);
+    }
+
+    fetch("/api/traum", {
+      cache: "no-store",
+      headers: storedPin ? { "x-admin-pin": storedPin } : undefined,
+    })
       .then((r) => r.json())
       .then((data: TraumStoreData) => {
         setStore(data);
+        if (storedPin && data.settings?.adminPin) {
+          setUnlocked(true);
+        }
         setTestEmailRecipient(
           data.settings?.notificationEmail ||
             data.settings?.email ||
@@ -313,6 +349,36 @@ export default function AdminDashboardPage() {
       })
       .catch(() => setLoading(false));
   }, []);
+
+  const handleUnlockWithPin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setPinError(false);
+    try {
+      const res = await fetch("/api/traum", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          type: "VERIFY_ADMIN_PIN",
+          pin: pinInput.trim(),
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setPinError(true);
+        return;
+      }
+      if (typeof window !== "undefined") {
+        window.sessionStorage.setItem("traum_admin_pin", pinInput.trim());
+      }
+      if (data.store) {
+        setStore(data.store);
+      }
+      setUnlocked(true);
+      setPinError(false);
+    } catch {
+      setPinError(true);
+    }
+  };
 
   const getSmartDefaults = (): SmartDepartureDefaults => {
     if (typeof window === "undefined") return DEFAULT_SMART_VALUES;
@@ -359,7 +425,7 @@ export default function AdminDashboardPage() {
     try {
       const res = await fetch("/api/traum", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: getAdminHeaders(),
         body: JSON.stringify(payload),
       });
       const data = await res.json();
@@ -389,12 +455,19 @@ export default function AdminDashboardPage() {
     try {
       const res = await fetch("/api/traum", {
         method: "PUT",
-        headers: { "Content-Type": "application/json" },
+        headers: getAdminHeaders(),
         body: JSON.stringify(store),
       });
       if (!res.ok) throw new Error("Error guardando");
       const saved: TraumStoreData = await res.json();
       setStore(saved);
+      if (saved.settings?.adminPin && typeof window !== "undefined") {
+        setPinInput(saved.settings.adminPin);
+        window.sessionStorage.setItem(
+          "traum_admin_pin",
+          saved.settings.adminPin
+        );
+      }
       broadcastUpdate();
       showToast(customSuccess || "Cambios guardados correctamente.", "ok");
     } catch {
@@ -486,6 +559,16 @@ export default function AdminDashboardPage() {
     return list;
   }, [store, departureFilter, todayAR]);
 
+  const getBasePriceForModality = (mod: ExperienceModality): number => {
+    const exp = (store?.experiences || []).find(
+      (item) =>
+        item.modality.toLowerCase() === mod.toLowerCase() ||
+        item.title.toLowerCase() === mod.toLowerCase()
+    );
+    if (exp?.basePrice && exp.basePrice > 0) return exp.basePrice;
+    return store?.paymentConfig?.defaultDepartureTotalPrice || 160000;
+  };
+
   // =========================================================================
   // ACCIONES EN 2 CLICS: ABRIR MODAL DE DÍA / CREAR / EDITAR / DUPLICAR
   // =========================================================================
@@ -499,6 +582,9 @@ export default function AdminDashboardPage() {
     setModalStart(smart.startTime);
     setModalEnd(smart.endTime);
     setModalSpots(smart.maxParticipants);
+    setModalTotalPrice(getBasePriceForModality(smart.experienceType));
+    setModalDepositPct(store?.paymentConfig?.depositPercentage || 30);
+    setModalPriceDisplayMode("per_person");
     setModalNotes("");
     setModalRepeatMode("none");
     setModalRepeatCount(2);
@@ -514,6 +600,17 @@ export default function AdminDashboardPage() {
     setModalStart(dep.startTime || "08:00");
     setModalEnd(dep.endTime || "17:30");
     setModalSpots(dep.maxParticipants);
+    setModalTotalPrice(
+      dep.totalPrice && dep.totalPrice > 0
+        ? dep.totalPrice
+        : getBasePriceForModality(dep.experienceType)
+    );
+    setModalDepositPct(
+      dep.depositPercentage && dep.depositPercentage > 0
+        ? dep.depositPercentage
+        : store?.paymentConfig?.depositPercentage || 30
+    );
+    setModalPriceDisplayMode(dep.priceDisplayMode || "per_person");
     setModalNotes(dep.additionalInfo || "");
     setModalRepeatMode("none");
     setDayModalOpen(true);
@@ -528,6 +625,17 @@ export default function AdminDashboardPage() {
     setModalStart(dep.startTime || "08:00");
     setModalEnd(dep.endTime || "17:30");
     setModalSpots(dep.maxParticipants);
+    setModalTotalPrice(
+      dep.totalPrice && dep.totalPrice > 0
+        ? dep.totalPrice
+        : getBasePriceForModality(dep.experienceType)
+    );
+    setModalDepositPct(
+      dep.depositPercentage && dep.depositPercentage > 0
+        ? dep.depositPercentage
+        : store?.paymentConfig?.depositPercentage || 30
+    );
+    setModalPriceDisplayMode(dep.priceDisplayMode || "per_person");
     setModalNotes(dep.additionalInfo || "");
     setModalRepeatMode("none");
     setDayModalOpen(true);
@@ -561,6 +669,9 @@ export default function AdminDashboardPage() {
           destination: modalRiver.trim(),
           experienceType: modalType,
           maxParticipants: modalSpots,
+          totalPrice: modalTotalPrice,
+          depositPercentage: modalDepositPct,
+          priceDisplayMode: modalPriceDisplayMode,
           additionalInfo: modalNotes.trim(),
         },
         "Salida actualizada con éxito."
@@ -579,6 +690,9 @@ export default function AdminDashboardPage() {
         destination: modalRiver.trim(),
         experienceType: modalType,
         maxParticipants: modalSpots,
+        totalPrice: modalTotalPrice,
+        depositPercentage: modalDepositPct,
+        priceDisplayMode: modalPriceDisplayMode,
         additionalInfo: modalNotes.trim(),
         repeatMode: modalRepeatMode,
         repeatCount: modalRepeatCount,
@@ -653,6 +767,9 @@ export default function AdminDashboardPage() {
       "Telefono_WhatsApp",
       "Email",
       "Cantidad_Personas",
+      "Sena_Abonada_ARS",
+      "Saldo_Restante_ARS",
+      "Operacion_Tarjeta",
       "Comentarios",
       "Fecha_Salida",
       "Rio",
@@ -665,6 +782,13 @@ export default function AdminDashboardPage() {
         `"${(e.whatsapp || "").replace(/"/g, '""')}"`,
         `"${(e.email || "").replace(/"/g, '""')}"`,
         e.participantsCount,
+        e.paymentReceipt?.depositPaid || 0,
+        e.paymentReceipt?.remainingBalance || 0,
+        `"${
+          e.paymentReceipt
+            ? `${e.paymentReceipt.cardBrand} **** ${e.paymentReceipt.cardLast4} (${e.paymentReceipt.paymentId})`
+            : "Sin pago online"
+        }"`,
         `"${(e.comments || "").replace(/"/g, '""')}"`,
         dep.date,
         `"${dep.destination.replace(/"/g, '""')}"`,
@@ -779,7 +903,7 @@ export default function AdminDashboardPage() {
     try {
       const res = await fetch("/api/traum", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: getAdminHeaders(),
         body: JSON.stringify({
           type: "SAVE_AND_VERIFY_EMAIL_SETTINGS",
           notificationEmail: store.settings.notificationEmail,
@@ -817,7 +941,7 @@ export default function AdminDashboardPage() {
     try {
       const res = await fetch("/api/traum", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: getAdminHeaders(),
         body: JSON.stringify({
           type: "SEND_TEST_EMAIL",
           recipientEmail:
@@ -868,7 +992,7 @@ export default function AdminDashboardPage() {
     );
   }
 
-  // Pantalla de acceso con PIN
+  // Pantalla de acceso con PIN (verificación real en servidor, sin exponer el PIN en pantalla)
   if (!unlocked) {
     return (
       <div className="min-h-screen bg-[#263D32] text-[#F2EFE6] flex items-center justify-center p-4">
@@ -886,18 +1010,7 @@ export default function AdminDashboardPage() {
             Ingresá tu clave para administrar salidas, solicitudes y galería.
           </p>
 
-          <form
-            onSubmit={(e) => {
-              e.preventDefault();
-              if (pinInput === (store.settings.adminPin || "traum2026")) {
-                setUnlocked(true);
-                setPinError(false);
-              } else {
-                setPinError(true);
-              }
-            }}
-            className="space-y-4"
-          >
+          <form onSubmit={handleUnlockWithPin} className="space-y-4">
             <div>
               <label className="block text-xs uppercase tracking-wider text-[#D8CEB9] mb-2">
                 Clave de acceso
@@ -911,16 +1024,17 @@ export default function AdminDashboardPage() {
               />
               {pinError && (
                 <p className="text-xs text-red-300 mt-2">
-                  Clave incorrecta. (Por defecto: <strong>traum2026</strong>)
+                  Clave de acceso incorrecta. Verificá tu PIN e intentá nuevamente.
                 </p>
               )}
             </div>
 
             <button
               type="submit"
+              disabled={busyAction}
               className="w-full py-3.5 bg-[#D8CEB9] text-[#263D32] hover:bg-[#F2EFE6] text-xs uppercase tracking-[0.2em] font-bold transition-colors cursor-pointer"
             >
-              Entrar al Panel
+              {busyAction ? "Verificando..." : "Entrar al Panel"}
             </button>
           </form>
 
@@ -932,7 +1046,7 @@ export default function AdminDashboardPage() {
               <ArrowLeft className="w-3.5 h-3.5" />
               <span>Volver a la web</span>
             </Link>
-            <span>PIN: {store.settings.adminPin || "traum2026"}</span>
+            <span>Acceso protegido</span>
           </div>
         </div>
       </div>
@@ -1432,6 +1546,32 @@ export default function AdminDashboardPage() {
                                 {dep.startTime}
                                 {dep.endTime ? ` a ${dep.endTime} hs` : " hs"}
                               </span>
+                              <span className="px-2 py-0.5 bg-[#E5DEC9] text-[#263D32] text-[11px] font-bold">
+                                Total salida:{" "}
+                                {formatArs(
+                                  dep.totalPrice ||
+                                    getBasePriceForModality(dep.experienceType)
+                                )}{" "}
+                                · Por cupo:{" "}
+                                {formatArs(
+                                  Math.round(
+                                    (dep.totalPrice ||
+                                      getBasePriceForModality(
+                                        dep.experienceType
+                                      )) / Math.max(1, dep.maxParticipants)
+                                  )
+                                )}{" "}
+                                · Seña:{" "}
+                                {dep.depositPercentage ||
+                                  store.paymentConfig?.depositPercentage ||
+                                  30}
+                                %
+                              </span>
+                              <span className="px-2 py-0.5 bg-white border border-[#D8CEB9] text-[#746657] text-[10px] font-semibold uppercase">
+                                {dep.priceDisplayMode === "total"
+                                  ? "Web: Muestra total salida"
+                                  : "Web: Muestra valor por persona"}
+                              </span>
                             </div>
 
                             <h4 className="font-serif text-xl sm:text-2xl text-[#263D32] font-bold">
@@ -1571,6 +1711,28 @@ export default function AdminDashboardPage() {
                                         Tel: {enr.whatsapp} · Email: {enr.email}{" "}
                                         · Cód: {enr.bookingCode}
                                       </p>
+                                      {enr.paymentReceipt && (
+                                        <div className="mt-1.5 inline-flex flex-wrap items-center gap-x-2 gap-y-1 px-2.5 py-1 bg-emerald-50 border border-emerald-300 text-emerald-950 text-[11px]">
+                                          <CreditCard className="w-3.5 h-3.5 text-emerald-700" />
+                                          <strong>
+                                            Seña abonada:{" "}
+                                            {formatArs(
+                                              enr.paymentReceipt.depositPaid
+                                            )}
+                                          </strong>
+                                          <span>
+                                            ({enr.paymentReceipt.cardBrand} ****{" "}
+                                            {enr.paymentReceipt.cardLast4} · Op.
+                                            #{enr.paymentReceipt.paymentId})
+                                          </span>
+                                          <span className="text-emerald-800 font-semibold">
+                                            · Resta cobrar en destino:{" "}
+                                            {formatArs(
+                                              enr.paymentReceipt.remainingBalance
+                                            )}
+                                          </span>
+                                        </div>
+                                      )}
                                       {enr.comments && (
                                         <p className="text-xs text-[#292D29] mt-0.5 italic">
                                           &ldquo;{enr.comments}&rdquo;
@@ -2474,7 +2636,179 @@ export default function AdminDashboardPage() {
               )}
             </div>
 
-            {/* BLOQUE 2: DATOS DE CONTACTO Y WHATSAPP */}
+            {/* BLOQUE 2: TARIFAS BASE POR SERVICIO, % DE SEÑA Y PAGOS CON TARJETA */}
+            <div className="bg-white border border-[#D8CEB9] p-4 sm:p-6 shadow-sm space-y-5">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-[#D8CEB9] pb-4">
+                <div>
+                  <h3 className="font-serif text-2xl sm:text-3xl text-[#263D32] flex items-center gap-2">
+                    <CreditCard className="w-6 h-6 text-[#65745A]" />
+                    <span>Tarifas por Servicio, Seña y Cobro con Tarjeta</span>
+                  </h3>
+                  <p className="text-xs sm:text-sm text-[#746657] mt-0.5">
+                    Definí el valor total base de cada servicio y el porcentaje de
+                    seña que se cobra con tarjeta en la web para las{" "}
+                    <strong>Salidas Programadas</strong>. Podés ajustar el precio
+                    individual y el modo de visualización (por persona o total) en
+                    cada salida del calendario.
+                  </p>
+                </div>
+              </div>
+
+              {/* Tarifas base de las 3 modalidades */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                {(store.experiences || []).map((exp) => (
+                  <div
+                    key={exp.id}
+                    className="p-4 bg-[#FAF8F3] border border-[#D8CEB9] space-y-2"
+                  >
+                    <span className="text-xs font-bold uppercase tracking-wider text-[#263D32] block">
+                      {exp.title}
+                    </span>
+                    <label className="block text-[11px] uppercase text-[#746657]">
+                      Precio total base de la salida (ARS)
+                    </label>
+                    <input
+                      type="number"
+                      min={1000}
+                      step={1000}
+                      value={exp.basePrice || 150000}
+                      onChange={(e) => {
+                        const val = Math.max(0, Number(e.target.value) || 0);
+                        setStore({
+                          ...store,
+                          experiences: (store.experiences || []).map((item) =>
+                            item.id === exp.id
+                              ? { ...item, basePrice: val }
+                              : item
+                          ),
+                        });
+                      }}
+                      className="w-full px-3 py-2 bg-white border border-[#D8CEB9] text-sm font-semibold text-[#263D32]"
+                    />
+                    <span className="text-[11px] text-[#65745A] block">
+                      Se usa como valor inicial al crear una salida de{" "}
+                      <strong>{exp.modality}</strong>:{" "}
+                      {formatArs(exp.basePrice || 150000)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+
+              {/* Porcentaje de seña por defecto y Mercado Pago opcional */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-4 bg-[#FAF8F3] border border-[#D8CEB9]">
+                <div>
+                  <label className="block text-xs font-bold uppercase tracking-wider text-[#263D32] mb-1">
+                    Porcentaje de Seña por defecto (%)
+                  </label>
+                  <div className="flex items-center gap-2">
+                    {[20, 30, 50, 100].map((pct) => (
+                      <button
+                        key={pct}
+                        type="button"
+                        onClick={() =>
+                          setStore({
+                            ...store,
+                            paymentConfig: {
+                              ...store.paymentConfig,
+                              depositPercentage: pct,
+                            },
+                          })
+                        }
+                        className={`px-3 py-2 text-xs font-bold border cursor-pointer ${
+                          (store.paymentConfig?.depositPercentage || 30) === pct
+                            ? "bg-[#263D32] text-white border-[#263D32]"
+                            : "bg-white text-[#292D29] border-[#D8CEB9]"
+                        }`}
+                      >
+                        {pct}%
+                      </button>
+                    ))}
+                    <input
+                      type="number"
+                      min={5}
+                      max={100}
+                      value={store.paymentConfig?.depositPercentage || 30}
+                      onChange={(e) => {
+                        const pct = Math.max(
+                          5,
+                          Math.min(100, Number(e.target.value) || 30)
+                        );
+                        setStore({
+                          ...store,
+                          paymentConfig: {
+                            ...store.paymentConfig,
+                            depositPercentage: pct,
+                          },
+                        });
+                      }}
+                      className="w-20 px-3 py-2 bg-white border border-[#D8CEB9] text-sm font-bold text-center"
+                    />
+                  </div>
+                  <span className="text-[11px] text-[#746657] block mt-1">
+                    En la web se muestra el precio total de los cupos elegidos, se
+                    resta el {100 - (store.paymentConfig?.depositPercentage || 30)}
+                    % restante a abonar el día de la salida y se cobra el{" "}
+                    {store.paymentConfig?.depositPercentage || 30}% de seña con
+                    tarjeta.
+                  </span>
+                </div>
+
+                <div>
+                  <div className="flex flex-wrap items-center justify-between gap-2 mb-1">
+                    <label className="block text-xs font-bold uppercase tracking-wider text-[#263D32]">
+                      Mercado Pago Access Token (Opcional)
+                    </label>
+                    <span className="px-2 py-0.5 bg-emerald-700 text-white text-[10px] font-bold uppercase tracking-wider">
+                      {store.paymentConfig?.mercadoPagoTokenConfigured ||
+                      (store.paymentConfig?.mercadoPagoAccessToken &&
+                        store.paymentConfig.mercadoPagoAccessToken.trim().length >
+                          10)
+                        ? "Mercado Pago API Activa"
+                        : "Modo Directo Automático Activo"}
+                    </span>
+                  </div>
+                  <input
+                    type="password"
+                    value={store.paymentConfig?.mercadoPagoAccessToken || ""}
+                    onChange={(e) =>
+                      setStore({
+                        ...store,
+                        paymentConfig: {
+                          ...store.paymentConfig,
+                          mercadoPagoAccessToken: e.target.value.trim(),
+                        },
+                      })
+                    }
+                    placeholder={
+                      store.paymentConfig?.mercadoPagoTokenConfigured
+                        ? "Token guardado en servidor (dejalo vacío para mantenerlo)"
+                        : "Opcional: APP_USR-... (si queda vacío usa cobro directo automático)"
+                    }
+                    className="w-full px-3.5 py-2 bg-white border border-[#D8CEB9] text-xs font-mono"
+                  />
+                  <span className="text-[11px] text-[#746657] block mt-1">
+                    Cero mantenimiento: si no cargás un token, la pasarela
+                    integrada valida la tarjeta en la web y emite el comprobante
+                    de reserva automáticamente.
+                  </span>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                onClick={() =>
+                  handleSaveFullStore(
+                    "Tarifas base, porcentaje de seña y configuración de pagos guardados."
+                  )
+                }
+                className="px-5 py-2.5 bg-[#263D32] hover:bg-[#3A4E3C] text-white text-xs font-bold uppercase tracking-wider flex items-center gap-2 cursor-pointer"
+              >
+                <Save className="w-4 h-4" />
+                <span>Guardar tarifas y configuración de pagos</span>
+              </button>
+            </div>
+
+            {/* BLOQUE 3: DATOS DE CONTACTO Y WHATSAPP */}
             <div className="bg-white border border-[#D8CEB9] p-4 sm:p-6 shadow-sm space-y-4">
               <h3 className="font-serif text-2xl text-[#263D32] border-b border-[#D8CEB9] pb-3">
                 Datos de Contacto y Clave del Panel
@@ -2685,9 +3019,13 @@ export default function AdminDashboardPage() {
                   </label>
                   <select
                     value={modalType}
-                    onChange={(e) =>
-                      setModalType(e.target.value as ExperienceModality)
-                    }
+                    onChange={(e) => {
+                      const nextMod = e.target.value as ExperienceModality;
+                      setModalType(nextMod);
+                      if (modalMode === "create") {
+                        setModalTotalPrice(getBasePriceForModality(nextMod));
+                      }
+                    }}
                     className="w-full px-3.5 py-2.5 bg-white border border-[#D8CEB9] text-sm"
                   >
                     {FISHING_MODALITIES.map((mod) => (
@@ -2728,6 +3066,134 @@ export default function AdminDashboardPage() {
                       className="w-14 px-2 py-2 bg-white border border-[#D8CEB9] text-sm text-center"
                     />
                   </div>
+                </div>
+              </div>
+
+              {/* Precio total de la salida, % de Seña y Modo de visualización en la web */}
+              <div className="p-3.5 bg-white border border-[#D8CEB9] space-y-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-bold uppercase tracking-wider text-[#263D32] mb-1">
+                      Precio total de la salida (ARS)
+                    </label>
+                    <input
+                      type="number"
+                      min={1000}
+                      step={1000}
+                      value={modalTotalPrice}
+                      onChange={(e) =>
+                        setModalTotalPrice(
+                          Math.max(1000, Number(e.target.value) || 0)
+                        )
+                      }
+                      className="w-full px-3 py-2 bg-[#FAF8F3] border border-[#D8CEB9] text-sm font-bold text-[#263D32]"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold uppercase tracking-wider text-[#263D32] mb-1">
+                      Seña a cobrar en la web (%)
+                    </label>
+                    <div className="flex items-center gap-1">
+                      {[20, 30, 50].map((pct) => (
+                        <button
+                          key={pct}
+                          type="button"
+                          onClick={() => setModalDepositPct(pct)}
+                          className={`px-2.5 py-2 text-xs font-bold border cursor-pointer ${
+                            modalDepositPct === pct
+                              ? "bg-[#263D32] text-white border-[#263D32]"
+                              : "bg-[#FAF8F3] text-[#292D29] border-[#D8CEB9]"
+                          }`}
+                        >
+                          {pct}%
+                        </button>
+                      ))}
+                      <input
+                        type="number"
+                        min={5}
+                        max={100}
+                        value={modalDepositPct}
+                        onChange={(e) =>
+                          setModalDepositPct(
+                            Math.max(
+                              5,
+                              Math.min(100, Number(e.target.value) || 30)
+                            )
+                          )
+                        }
+                        className="w-16 px-2 py-2 bg-[#FAF8F3] border border-[#D8CEB9] text-sm font-bold text-center"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Selector de cómo mostrar el precio en la web */}
+                <div>
+                  <label className="block text-xs font-bold uppercase tracking-wider text-[#263D32] mb-1">
+                    ¿Cómo mostrar el precio en la página web?
+                  </label>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setModalPriceDisplayMode("per_person")}
+                      className={`p-2.5 text-left border text-xs cursor-pointer transition-colors ${
+                        modalPriceDisplayMode === "per_person"
+                          ? "bg-[#263D32] text-[#F2EFE6] border-[#263D32]"
+                          : "bg-[#FAF8F3] text-[#292D29] border-[#D8CEB9]"
+                      }`}
+                    >
+                      <strong className="block">
+                        Mostrar precio por persona / cupo
+                      </strong>
+                      <span className="text-[11px] opacity-85">
+                        Ej:{" "}
+                        {formatArs(
+                          Math.round(modalTotalPrice / Math.max(1, modalSpots))
+                        )}{" "}
+                        por cupo
+                      </span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setModalPriceDisplayMode("total")}
+                      className={`p-2.5 text-left border text-xs cursor-pointer transition-colors ${
+                        modalPriceDisplayMode === "total"
+                          ? "bg-[#263D32] text-[#F2EFE6] border-[#263D32]"
+                          : "bg-[#FAF8F3] text-[#292D29] border-[#D8CEB9]"
+                      }`}
+                    >
+                      <strong className="block">
+                        Mostrar precio total de la salida
+                      </strong>
+                      <span className="text-[11px] opacity-85">
+                        Ej: {formatArs(modalTotalPrice)} ({modalSpots} cupos)
+                      </span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Resumen matemático automático de cómo se divide */}
+                <div className="p-2.5 bg-[#F2EFE6] border border-[#D8CEB9] text-[11px] text-[#292D29] flex flex-wrap items-center justify-between gap-2">
+                  <span>
+                    <strong>Total salida ({modalSpots} cupos):</strong>{" "}
+                    {formatArs(modalTotalPrice)}
+                  </span>
+                  <span>
+                    <strong>Valor por 1 cupo:</strong>{" "}
+                    {formatArs(
+                      Math.round(modalTotalPrice / Math.max(1, modalSpots))
+                    )}
+                  </span>
+                  <span className="text-[#263D32] font-bold">
+                    Seña online por 1 cupo ({modalDepositPct}%):{" "}
+                    {formatArs(
+                      Math.round(
+                        Math.round(modalTotalPrice / Math.max(1, modalSpots)) *
+                          (modalDepositPct / 100)
+                      )
+                    )}
+                  </span>
                 </div>
               </div>
 

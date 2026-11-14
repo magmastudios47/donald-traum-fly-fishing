@@ -21,6 +21,27 @@ export type CustomRequestStatus =
   | "rechazada"
   | "reprogramada";
 
+export type PriceDisplayMode = "per_person" | "total";
+
+export interface EnrollmentPaymentReceipt {
+  paymentId: string;
+  status: "aprobado" | "pendiente_lista_espera" | "manual_guia";
+  provider: "mercadopago_api" | "checkout_directo" | "manual";
+  departureTotalPrice: number;
+  maxParticipants: number;
+  pricePerSpot: number;
+  spotsBooked: number;
+  subtotalForSpots: number;
+  depositPercentage: number;
+  remainingBalance: number;
+  depositPaid: number;
+  cardBrand?: string;
+  cardLast4?: string;
+  cardholderName?: string;
+  billingPostalCode?: string;
+  paidAt: string;
+}
+
 export interface ExperienceItem {
   id: string;
   number: string;
@@ -35,6 +56,8 @@ export interface ExperienceItem {
   capacityPlaceholder: string;
   priceLabel?: string;
   paymentLink?: string;
+  basePrice?: number;
+  defaultDepositPercentage?: number;
 }
 
 export interface DestinationItem {
@@ -67,6 +90,7 @@ export interface PaymentConfig {
   title: string;
   subtitle: string;
   depositPercentage: number;
+  defaultDepartureTotalPrice?: number;
   acceptedMethods: string[];
   bankName: string;
   bankAlias: string;
@@ -75,6 +99,9 @@ export interface PaymentConfig {
   mercadoPagoLink: string;
   internationalPaymentLink: string;
   cancellationNotice: string;
+  mercadoPagoPublicKey?: string;
+  mercadoPagoAccessToken?: string;
+  mercadoPagoTokenConfigured?: boolean;
 }
 
 export interface ReviewItem {
@@ -151,6 +178,9 @@ export interface CalendarDeparture {
   isDemo?: boolean;
   priceLabel?: string;
   paymentLink?: string;
+  totalPrice?: number; // Precio total único de la salida (se divide entre maxParticipants)
+  depositPercentage?: number; // Porcentaje de seña (ej. 30)
+  priceDisplayMode?: PriceDisplayMode; // "per_person" | "total"
 }
 
 /**
@@ -170,6 +200,7 @@ export interface DepartureEnrollment {
   participantsCount: number; // cantidad_personas
   comments: string; // comentarios
   status: EnrollmentStatus; // "confirmada" | "lista_espera" | "cancelada"
+  paymentReceipt?: EnrollmentPaymentReceipt;
   createdAt: string;
   updatedAt?: string;
   cancelledAt?: string;

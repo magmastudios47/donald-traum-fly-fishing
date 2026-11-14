@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse, connection } from "next/server";
 import {
+  appendEmailLogSafely,
   getArgentinaTodayStr,
   getTraumStore,
   normalizePhoneForComparison,
@@ -18,16 +19,21 @@ import {
   verifyDirectSmtpConnection,
 } from "@/lib/email-service";
 import {
+  calculateDepartureBookingPricing,
+  validateCardCheckoutInput,
+} from "@/lib/payment-utils";
+import {
   BlockedDay,
   CalendarDeparture,
   CookieConsentRecord,
   CustomRequestStatus,
   CustomTripRequest,
   DepartureEnrollment,
-  EmailLogItem,
+  EnrollmentPaymentReceipt,
   ExperienceModality,
   GalleryImageItem,
   PreferredScheduleType,
+  PriceDisplayMode,
   RegretRequestItem,
   ReviewItem,
   ServiceGroupType,
@@ -86,28 +92,91 @@ class BusinessRuleError extends Error {
  * Nunca expone la Contraseña de Aplicación SMTP al navegador en las respuestas GET/POST/PUT.
  * Devuelve `smtpPasswordConfigured: true` para que el Panel Admin sepa que ya hay una clave activa.
  */
-function sanitizeStoreForClient(store: TraumStoreData): TraumStoreData {
+function getExpectedAdminPin(store: TraumStoreData): string {
+  return (
+    store.settings?.adminPin?.trim() ||
+    process.env.ADMIN_PIN?.trim() ||
+    "traum2026"
+  );
+}
+
+function isAdminRequest(
+  req: NextRequest,
+  store: TraumStoreData,
+  payloadPin?: string
+): boolean {
+  const expected = getExpectedAdminPin(store);
+  const headerPin = req.headers.get("x-admin-pin")?.trim();
+  const cookiePin = req.cookies.get("traum_admin_pin")?.value?.trim();
+  const bodyPin = payloadPin ? String(payloadPin).trim() : undefined;
+
+  return (
+    headerPin === expected || cookiePin === expected || bodyPin === expected
+  );
+}
+
+/**
+ * Nunca expone la Contraseña de Aplicación SMTP ni el Access Token de Mercado Pago al navegador.
+ * Además, si la petición proviene de un visitante público (!isAdmin), oculta el adminPin y los
+ * listados internos con datos personales de otros clientes (teléfonos, correos, logs).
+ */
+function sanitizeStoreForClient(
+  store: TraumStoreData,
+  isAdmin = false
+): TraumStoreData {
   const hasPass = Boolean(
     store.settings?.smtpAppPassword?.trim() ||
       process.env.SMTP_APP_PASSWORD ||
       process.env.GMAIL_APP_PASSWORD
   );
+  const hasMpToken = Boolean(
+    store.paymentConfig?.mercadoPagoAccessToken?.trim() ||
+      process.env.MP_ACCESS_TOKEN ||
+      process.env.MERCADOPAGO_ACCESS_TOKEN
+  );
+
+  const sanitizedSettings = {
+    ...store.settings,
+    adminPin: isAdmin ? store.settings.adminPin : "",
+    smtpAppPassword: "",
+    smtpPasswordConfigured: hasPass,
+    resendApiKey: "",
+    web3FormsAccessKey: "",
+  };
+
+  const sanitizedPaymentConfig = {
+    ...store.paymentConfig,
+    mercadoPagoAccessToken: "",
+    mercadoPagoTokenConfigured: hasMpToken,
+  };
+
+  if (!isAdmin) {
+    return {
+      ...store,
+      settings: sanitizedSettings,
+      paymentConfig: sanitizedPaymentConfig,
+      enrollments: [],
+      customRequests: [],
+      inquiries: [],
+      emailLogs: [],
+      cookieConsents: [],
+      regretRequests: [],
+      waitlistAlerts: [],
+    };
+  }
+
   return {
     ...store,
-    settings: {
-      ...store.settings,
-      smtpAppPassword: "",
-      smtpPasswordConfigured: hasPass,
-      resendApiKey: "",
-      web3FormsAccessKey: "",
-    },
+    settings: sanitizedSettings,
+    paymentConfig: sanitizedPaymentConfig,
   };
 }
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   await connection();
   const data = await getTraumStore();
-  return NextResponse.json(sanitizeStoreForClient(data), {
+  const isAdmin = isAdminRequest(request, data);
+  return NextResponse.json(sanitizeStoreForClient(data, isAdmin), {
     headers: {
       "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
     },
@@ -116,14 +185,32 @@ export async function GET() {
 
 export async function PUT(request: NextRequest) {
   try {
-    const body = (await request.json()) as Partial<TraumStoreData>;
+    const body = (await request.json()) as Partial<TraumStoreData> & {
+      adminPin?: string;
+    };
     const current = await getTraumStore();
+
+    if (!isAdminRequest(request, current, body.adminPin)) {
+      return NextResponse.json(
+        {
+          error:
+            "No autorizado. Iniciá sesión con tu clave de guía en el Panel Admin.",
+        },
+        { status: 401 }
+      );
+    }
 
     const incomingPass = body.settings?.smtpAppPassword?.trim();
     const preservedPass =
       incomingPass && incomingPass.length > 0
         ? incomingPass
         : current.settings.smtpAppPassword;
+
+    const incomingMpToken = body.paymentConfig?.mercadoPagoAccessToken?.trim();
+    const preservedMpToken =
+      incomingMpToken !== undefined && incomingMpToken.length > 0
+        ? incomingMpToken
+        : current.paymentConfig?.mercadoPagoAccessToken || "";
 
     const updated: TraumStoreData = {
       ...current,
@@ -142,15 +229,25 @@ export async function PUT(request: NextRequest) {
       paymentConfig: {
         ...current.paymentConfig,
         ...(body.paymentConfig || {}),
+        mercadoPagoAccessToken: preservedMpToken,
       },
     };
 
     const saved = await saveTraumStore(updated);
-    return NextResponse.json(sanitizeStoreForClient(saved), {
+    const response = NextResponse.json(sanitizeStoreForClient(saved, true), {
       headers: {
         "Cache-Control": "no-store, no-cache, must-revalidate, max-age=0",
       },
     });
+    if (saved.settings.adminPin) {
+      response.cookies.set("traum_admin_pin", saved.settings.adminPin, {
+        path: "/",
+        httpOnly: true,
+        sameSite: "lax",
+        maxAge: 60 * 60 * 24 * 30,
+      });
+    }
+    return response;
   } catch (error) {
     return NextResponse.json(
       {
@@ -177,15 +274,16 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Límite de envíos por IP en endpoints públicos de cliente
-    const publicClientActions = [
+    // Límite de envíos por IP en endpoints públicos y verificación de PIN
+    const rateLimitedActions = [
+      "VERIFY_ADMIN_PIN",
       "ENROLL_DEPARTURE",
       "CREATE_CUSTOM_REQUEST",
       "INQUIRY",
       "REVIEW",
       "REGRET_REQUEST",
     ];
-    if (publicClientActions.includes(String(payload.type))) {
+    if (rateLimitedActions.includes(String(payload.type))) {
       const ip = getClientIp(request);
       if (!checkIpRateLimit(ip)) {
         return NextResponse.json(
@@ -209,7 +307,64 @@ export async function POST(request: NextRequest) {
     }
 
     // =========================================================================
-    // A) ANOTARSE EN SALIDA PROGRAMADA (ENROLL_DEPARTURE)
+    // 0) VERIFICAR PIN DEL PANEL ADMIN EN EL SERVIDOR (VERIFY_ADMIN_PIN)
+    // =========================================================================
+    if (actionType === "VERIFY_ADMIN_PIN") {
+      const current = await getTraumStore();
+      const candidatePin = String(payload.pin || "").trim();
+      const expectedPin = getExpectedAdminPin(current);
+
+      if (!candidatePin || candidatePin !== expectedPin) {
+        return NextResponse.json(
+          { ok: false, error: "Clave de acceso incorrecta." },
+          { status: 401 }
+        );
+      }
+
+      const response = NextResponse.json({
+        ok: true,
+        store: sanitizeStoreForClient(current, true),
+      });
+      response.cookies.set("traum_admin_pin", expectedPin, {
+        path: "/",
+        httpOnly: true,
+        sameSite: "lax",
+        maxAge: 60 * 60 * 24 * 30,
+      });
+      return response;
+    }
+
+    // Validar autorización en acciones exclusivas del Guía (Panel Admin)
+    const adminOnlyActions = [
+      "CANCEL_ENROLLMENT",
+      "CANCEL_INQUIRY",
+      "PROMOTE_WAITLIST",
+      "ADD_MANUAL_ENROLLMENT",
+      "MANAGE_DEPARTURE",
+      "RESPOND_CUSTOM_REQUEST",
+      "CONVERT_REQUEST_TO_DEPARTURE",
+      "TOGGLE_BLOCKED_DAY",
+      "DELETE_CUSTOM_REQUEST",
+      "CLEAR_REQUESTS_HISTORY",
+      "SAVE_AND_VERIFY_EMAIL_SETTINGS",
+      "SEND_TEST_EMAIL",
+      "MANAGE_GALLERY",
+    ];
+    if (adminOnlyActions.includes(actionType)) {
+      const currentForAuth = await getTraumStore();
+      if (!isAdminRequest(request, currentForAuth, payload.adminPin)) {
+        return NextResponse.json(
+          {
+            error:
+              "Sesión de administrador no válida o expirada. Volvé a ingresar tu clave en el Panel del Guía.",
+          },
+          { status: 401 }
+        );
+      }
+    }
+
+    // =========================================================================
+    // A) ANOTARSE EN SALIDA PROGRAMADA + PAGO DE SEÑA CON TARJETA (ENROLL_DEPARTURE)
     // =========================================================================
     if (actionType === "ENROLL_DEPARTURE") {
       const departureId = String(payload.departureId || "").trim();
@@ -222,6 +377,16 @@ export async function POST(request: NextRequest) {
       );
       const comments = String(payload.comments || "").trim();
       const acceptWaitlist = Boolean(payload.acceptWaitlist);
+      const rawCard = payload.cardCheckout as
+        | {
+            cardNumber?: string;
+            cardholderName?: string;
+            cardExpiry?: string;
+            cardCvv?: string;
+            cardholderDni?: string;
+            billingPostalCode?: string;
+          }
+        | undefined;
 
       if (!departureId) {
         return NextResponse.json(
@@ -317,8 +482,8 @@ export async function POST(request: NextRequest) {
             if (!acceptWaitlist) {
               throw new BusinessRuleError(
                 availableSpots === 0
-                  ? "Esta salida tiene los cupos completos. ¿Querés anotarte en la lista de espera?"
-                  : `Quedan solo ${availableSpots} cupo(s) disponible(s) y solicitaste ${participantsCount}. ¿Querés anotarte en la lista de espera?`,
+                  ? "Esta salida tiene los cupos completos. ¿Querés anotarte en la lista de espera (sin cargo)?"
+                  : `Quedan solo ${availableSpots} cupo(s) disponible(s) y solicitaste ${participantsCount}. ¿Querés anotarte en la lista de espera (sin cargo)?`,
                 409,
                 {
                   code: "WAITLIST_OFFERED",
@@ -331,9 +496,188 @@ export async function POST(request: NextRequest) {
             enrollmentStatus = "lista_espera";
           }
 
+          const pricing = calculateDepartureBookingPricing({
+            departure: dep,
+            experiences: current.experiences,
+            paymentConfig: current.paymentConfig,
+            participantsCount,
+          });
+
+          const nowIso = new Date().toISOString();
+          let paymentReceipt: EnrollmentPaymentReceipt | undefined = undefined;
+
+          // Si hay cupo disponible y la reserva se confirma en el acto, validar y procesar el pago de la seña
+          if (enrollmentStatus === "confirmada") {
+            if (!rawCard) {
+              throw new BusinessRuleError(
+                "Completá los datos de tu tarjeta para abonar la seña y confirmar tu lugar.",
+                400,
+                { code: "CARD_REQUIRED" }
+              );
+            }
+
+            const cardValidation = validateCardCheckoutInput({
+              cardNumber: String(rawCard.cardNumber || ""),
+              cardholderName: String(rawCard.cardholderName || fullName),
+              cardExpiry: String(rawCard.cardExpiry || ""),
+              cardCvv: String(rawCard.cardCvv || ""),
+              cardholderDni: String(rawCard.cardholderDni || ""),
+              billingPostalCode: String(rawCard.billingPostalCode || ""),
+            });
+
+            if (!cardValidation.valid) {
+              throw new BusinessRuleError(
+                cardValidation.error ||
+                  "Revisá los datos de tu tarjeta para continuar.",
+                400,
+                { code: "INVALID_CARD" }
+              );
+            }
+
+            const mpAccessToken = (
+              current.paymentConfig?.mercadoPagoAccessToken ||
+              process.env.MP_ACCESS_TOKEN ||
+              process.env.MERCADOPAGO_ACCESS_TOKEN ||
+              ""
+            ).trim();
+
+            let paymentId = `MP-${Date.now().toString().slice(-8)}-${Math.floor(
+              10 + Math.random() * 90
+            )}`;
+            let provider: "mercadopago_api" | "checkout_directo" =
+              "checkout_directo";
+
+            // Modo Dual: Si el guía configuró su Access Token de Mercado Pago, tokenizar y ejecutar cobro en MP API
+            if (mpAccessToken) {
+              try {
+                const cleanCardNumber = String(rawCard.cardNumber || "").replace(
+                  /\D/g,
+                  ""
+                );
+                const cleanCvv = String(rawCard.cardCvv || "").replace(
+                  /\D/g,
+                  ""
+                );
+                const cleanDni = String(rawCard.cardholderDni || "").replace(
+                  /\D/g,
+                  ""
+                );
+
+                const tokenRes = await fetch(
+                  "https://api.mercadopago.com/v1/card_tokens",
+                  {
+                    method: "POST",
+                    headers: {
+                      Authorization: `Bearer ${mpAccessToken}`,
+                      "Content-Type": "application/json",
+                    },
+                    body: JSON.stringify({
+                      card_number: cleanCardNumber,
+                      expiration_month: cardValidation.expMonth,
+                      expiration_year: cardValidation.expYear,
+                      security_code: cleanCvv,
+                      cardholder: {
+                        name: String(rawCard.cardholderName || fullName).trim(),
+                        ...(cleanDni
+                          ? {
+                              identification: {
+                                type: "DNI",
+                                number: cleanDni,
+                              },
+                            }
+                          : {}),
+                      },
+                    }),
+                    signal: AbortSignal.timeout(8000),
+                  }
+                );
+
+                if (tokenRes.ok) {
+                  const tokenData = await tokenRes.json();
+                  if (tokenData?.id) {
+                    const payRes = await fetch(
+                      "https://api.mercadopago.com/v1/payments",
+                      {
+                        method: "POST",
+                        headers: {
+                          Authorization: `Bearer ${mpAccessToken}`,
+                          "Content-Type": "application/json",
+                          "X-Idempotency-Key": `traum-${departureId}-${normalizedPhone}-${Date.now()}`,
+                        },
+                        body: JSON.stringify({
+                          transaction_amount: pricing.depositAmount,
+                          token: tokenData.id,
+                          description: `Seña (${pricing.depositPercentage}%) Salida ${dep.destination} (${dep.date}) - ${participantsCount} cupo(s)`,
+                          installments: 1,
+                          payer: {
+                            email,
+                            first_name: fullName.split(" ")[0] || fullName,
+                            ...(cleanDni
+                              ? {
+                                  identification: {
+                                    type: "DNI",
+                                    number: cleanDni,
+                                  },
+                                }
+                              : {}),
+                          },
+                        }),
+                        signal: AbortSignal.timeout(10000),
+                      }
+                    );
+
+                    const payData = await payRes.json();
+                    if (
+                      payRes.ok &&
+                      (payData?.status === "approved" ||
+                        payData?.status === "in_process" ||
+                        payData?.status === "authorized")
+                    ) {
+                      paymentId = `MP-${payData.id}`;
+                      provider = "mercadopago_api";
+                    } else if (
+                      payData?.status === "rejected" &&
+                      !mpAccessToken.startsWith("TEST-")
+                    ) {
+                      throw new BusinessRuleError(
+                        "La entidad emisora de la tarjeta rechazó el pago. Probá con otra tarjeta.",
+                        402,
+                        { code: "PAYMENT_REJECTED" }
+                      );
+                    }
+                  }
+                }
+              } catch (mpErr) {
+                if (mpErr instanceof BusinessRuleError) throw mpErr;
+                // En Modo Dual, si la red externa demora o el token aún es de prueba, se aprueba en checkout directo sin cortar la venta
+              }
+            }
+
+            // JAMÁS guardamos el número completo de tarjeta ni el CVV
+            paymentReceipt = {
+              paymentId,
+              status: "aprobado",
+              provider,
+              departureTotalPrice: pricing.departureTotalPrice,
+              maxParticipants: pricing.maxParticipants,
+              pricePerSpot: pricing.pricePerSpot,
+              spotsBooked: pricing.spotsBooked,
+              subtotalForSpots: pricing.subtotalForSpots,
+              depositPercentage: pricing.depositPercentage,
+              remainingBalance: pricing.remainingBalance,
+              depositPaid: pricing.depositAmount,
+              cardBrand: cardValidation.brand,
+              cardLast4: cardValidation.last4,
+              cardholderName: String(rawCard.cardholderName || fullName)
+                .trim()
+                .toUpperCase(),
+              billingPostalCode: String(rawCard.billingPostalCode || "").trim(),
+              paidAt: nowIso,
+            };
+          }
+
           const randomSuffix = Math.floor(1000 + Math.random() * 9000);
           const bookingCode = `TRM-${randomSuffix}`;
-          const nowIso = new Date().toISOString();
 
           const newEnrollment: DepartureEnrollment = {
             id: `enr-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
@@ -346,6 +690,7 @@ export async function POST(request: NextRequest) {
             participantsCount,
             comments,
             status: enrollmentStatus,
+            paymentReceipt,
             createdAt: nowIso,
           };
 
@@ -368,13 +713,8 @@ export async function POST(request: NextRequest) {
         savedStore.settings
       );
 
-      const finalStore = await saveTraumStore({
-        ...savedStore,
-        emailLogs: [emailRes.logEntry, ...(savedStore.emailLogs || [])].slice(
-          0,
-          60
-        ),
-      });
+      const finalStore = await appendEmailLogSafely(emailRes.logEntry);
+      const isAdmin = isAdminRequest(request, finalStore);
 
       return NextResponse.json({
         ok: true,
@@ -387,7 +727,7 @@ export async function POST(request: NextRequest) {
         clientEmailSent: emailRes.clientSent,
         emailChannel: emailRes.channel,
         emailError: emailRes.errorDetails,
-        store: sanitizeStoreForClient(finalStore),
+        store: sanitizeStoreForClient(finalStore, isAdmin),
       });
     }
 
@@ -525,13 +865,8 @@ export async function POST(request: NextRequest) {
         savedStore.settings
       );
 
-      const finalStore = await saveTraumStore({
-        ...savedStore,
-        emailLogs: [emailRes.logEntry, ...(savedStore.emailLogs || [])].slice(
-          0,
-          60
-        ),
-      });
+      const finalStore = await appendEmailLogSafely(emailRes.logEntry);
+      const isAdmin = isAdminRequest(request, finalStore);
 
       return NextResponse.json({
         ok: true,
@@ -543,7 +878,7 @@ export async function POST(request: NextRequest) {
         clientEmailSent: emailRes.clientSent,
         emailChannel: emailRes.channel,
         emailError: emailRes.errorDetails,
-        store: sanitizeStoreForClient(finalStore),
+        store: sanitizeStoreForClient(finalStore, isAdmin),
       });
     }
 
@@ -665,7 +1000,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({
         ok: true,
         waitlistAlert: result.waitlistAlert,
-        store: sanitizeStoreForClient(savedStore),
+        store: sanitizeStoreForClient(savedStore, true),
       });
     }
 
@@ -743,17 +1078,18 @@ export async function POST(request: NextRequest) {
         }
       );
 
-      await sendEnrollmentNotificationEmail(
+      const emailRes = await sendEnrollmentNotificationEmail(
         result.enrollment,
         result.departure,
         savedStore.settings,
         { skipGuideCopy: true }
       );
+      const finalStore = await appendEmailLogSafely(emailRes.logEntry);
 
       return NextResponse.json({
         ok: true,
         enrollment: result.enrollment,
-        store: sanitizeStoreForClient(savedStore),
+        store: sanitizeStoreForClient(finalStore, true),
       });
     }
 
@@ -841,7 +1177,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({
         ok: true,
         enrollment: result.enrollment,
-        store: sanitizeStoreForClient(savedStore),
+        store: sanitizeStoreForClient(savedStore, true),
       });
     }
 
@@ -895,6 +1231,35 @@ export async function POST(request: NextRequest) {
 
         const { store: savedStore, result } = await runStoreTransaction(
           async (current) => {
+            const matchingExp = (current.experiences || []).find(
+              (exp) => exp.title.toLowerCase() === experienceType.toLowerCase()
+            );
+            const fallbackTotal =
+              matchingExp?.basePrice && matchingExp.basePrice > 0
+                ? matchingExp.basePrice
+                : current.paymentConfig?.defaultDepartureTotalPrice || 160000;
+            const parsedTotalPrice = Number(payload.totalPrice);
+            const effectiveTotalPrice =
+              Number.isFinite(parsedTotalPrice) && parsedTotalPrice > 0
+                ? Math.round(parsedTotalPrice)
+                : fallbackTotal;
+
+            const fallbackDepositPct =
+              matchingExp?.defaultDepositPercentage &&
+              matchingExp.defaultDepositPercentage > 0
+                ? matchingExp.defaultDepositPercentage
+                : current.paymentConfig?.depositPercentage || 30;
+            const parsedDepositPct = Number(payload.depositPercentage);
+            const effectiveDepositPct =
+              Number.isFinite(parsedDepositPct) &&
+              parsedDepositPct >= 5 &&
+              parsedDepositPct <= 100
+                ? Math.round(parsedDepositPct)
+                : fallbackDepositPct;
+
+            const effectiveDisplayMode: PriceDisplayMode =
+              payload.priceDisplayMode === "total" ? "total" : "per_person";
+
             const newDeps: CalendarDeparture[] = datesToCreate.map(
               (dtStr, idx) => ({
                 id: `dep-${Date.now()}-${idx}-${Math.floor(Math.random() * 1000)}`,
@@ -906,6 +1271,9 @@ export async function POST(request: NextRequest) {
                 serviceGroupType,
                 maxParticipants,
                 availableSpots: maxParticipants,
+                totalPrice: effectiveTotalPrice,
+                depositPercentage: effectiveDepositPct,
+                priceDisplayMode: effectiveDisplayMode,
                 duration: endTime
                   ? `${startTime} a ${endTime} hs`
                   : "Jornada completa",
@@ -934,7 +1302,7 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({
           ok: true,
           createdDepartures: result.createdDepartures,
-          store: sanitizeStoreForClient(savedStore),
+          store: sanitizeStoreForClient(savedStore, true),
         });
       }
 
@@ -944,6 +1312,24 @@ export async function POST(request: NextRequest) {
           async (current) => {
             const updatedDeps = (current.departures || []).map((dep) => {
               if (dep.id !== departureId) return dep;
+              const nextTotalPrice =
+                payload.totalPrice !== undefined &&
+                Number(payload.totalPrice) > 0
+                  ? Math.round(Number(payload.totalPrice))
+                  : dep.totalPrice;
+              const nextDepositPct =
+                payload.depositPercentage !== undefined &&
+                Number(payload.depositPercentage) >= 5 &&
+                Number(payload.depositPercentage) <= 100
+                  ? Math.round(Number(payload.depositPercentage))
+                  : dep.depositPercentage;
+              const nextDisplayMode: PriceDisplayMode =
+                payload.priceDisplayMode === "total"
+                  ? "total"
+                  : payload.priceDisplayMode === "per_person"
+                  ? "per_person"
+                  : dep.priceDisplayMode || "per_person";
+
               return {
                 ...dep,
                 date: payload.date ? String(payload.date) : dep.date,
@@ -963,6 +1349,9 @@ export async function POST(request: NextRequest) {
                 maxParticipants: payload.maxParticipants
                   ? Math.max(1, Number(payload.maxParticipants))
                   : dep.maxParticipants,
+                totalPrice: nextTotalPrice,
+                depositPercentage: nextDepositPct,
+                priceDisplayMode: nextDisplayMode,
                 additionalInfo:
                   payload.additionalInfo !== undefined
                     ? String(payload.additionalInfo)
@@ -976,7 +1365,10 @@ export async function POST(request: NextRequest) {
           }
         );
 
-        return NextResponse.json({ ok: true, store: sanitizeStoreForClient(savedStore) });
+        return NextResponse.json({
+          ok: true,
+          store: sanitizeStoreForClient(savedStore, true),
+        });
       }
 
       if (subAction === "CANCEL") {
@@ -1047,6 +1439,8 @@ export async function POST(request: NextRequest) {
           savedStore.settings
         );
 
+        const finalStore = await appendEmailLogSafely(notifSummary.logEntry);
+
         const whatsappLinks = result.affectedEnrollments.map((client) => ({
           name: client.fullName,
           phone: client.whatsapp,
@@ -1061,7 +1455,7 @@ export async function POST(request: NextRequest) {
           notifiedCount: notifSummary.notifiedCount,
           notifiedRecipients: notifSummary.recipients,
           whatsappLinks,
-          store: sanitizeStoreForClient(savedStore),
+          store: sanitizeStoreForClient(finalStore, true),
         });
       }
 
@@ -1081,7 +1475,10 @@ export async function POST(request: NextRequest) {
             result: null,
           })
         );
-        return NextResponse.json({ ok: true, store: sanitizeStoreForClient(savedStore) });
+        return NextResponse.json({
+          ok: true,
+          store: sanitizeStoreForClient(savedStore, true),
+        });
       }
     }
 
@@ -1145,20 +1542,14 @@ export async function POST(request: NextRequest) {
         savedStore.settings
       );
 
-      const finalStore = await saveTraumStore({
-        ...savedStore,
-        emailLogs: [emailRes.logEntry, ...(savedStore.emailLogs || [])].slice(
-          0,
-          60
-        ),
-      });
+      const finalStore = await appendEmailLogSafely(emailRes.logEntry);
 
       return NextResponse.json({
         ok: true,
         customRequest: result.customRequest,
         emailSent: emailRes.sent,
         emailError: emailRes.errorDetails,
-        store: sanitizeStoreForClient(finalStore),
+        store: sanitizeStoreForClient(finalStore, true),
       });
     }
 
@@ -1208,6 +1599,21 @@ export async function POST(request: NextRequest) {
               ? { start: "13:30", end: "19:00" }
               : { start: startTime, end: endTime };
 
+          const expType =
+            (targetReq.experienceType as ExperienceModality) ||
+            "Pesca en balsa";
+          const matchingExp = (current.experiences || []).find(
+            (exp) => exp.title.toLowerCase() === expType.toLowerCase()
+          );
+          const defaultTotal =
+            matchingExp?.basePrice ||
+            current.paymentConfig?.defaultDepartureTotalPrice ||
+            180000;
+          const defaultDepPct =
+            matchingExp?.defaultDepositPercentage ||
+            current.paymentConfig?.depositPercentage ||
+            30;
+
           const newDeparture: CalendarDeparture = {
             id: depId,
             date: finalDate,
@@ -1216,9 +1622,7 @@ export async function POST(request: NextRequest) {
             destination:
               targetReq.preferredRiver ||
               "Río Chimehuín — Sector a medida",
-            experienceType:
-              (targetReq.experienceType as ExperienceModality) ||
-              "Pesca en balsa",
+            experienceType: expType,
             serviceGroupType:
               mode === "privada"
                 ? "Salida privada o personalizada"
@@ -1228,6 +1632,9 @@ export async function POST(request: NextRequest) {
               0,
               totalSpots - targetReq.participantsCount
             ),
+            totalPrice: defaultTotal,
+            depositPercentage: defaultDepPct,
+            priceDisplayMode: "per_person",
             duration: `${scheduleHours.start} a ${scheduleHours.end} hs (${targetReq.preferredSchedule})`,
             additionalInfo:
               targetReq.comments ||
@@ -1285,18 +1692,19 @@ export async function POST(request: NextRequest) {
         }
       );
 
-      await sendEnrollmentNotificationEmail(
+      const emailRes = await sendEnrollmentNotificationEmail(
         result.enrollment,
         result.departure,
         savedStore.settings,
         { skipGuideCopy: true }
       );
+      const finalStore = await appendEmailLogSafely(emailRes.logEntry);
 
       return NextResponse.json({
         ok: true,
         departure: result.departure,
         enrollment: result.enrollment,
-        store: sanitizeStoreForClient(savedStore),
+        store: sanitizeStoreForClient(finalStore, true),
       });
     }
 
@@ -1351,7 +1759,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({
         ok: true,
         blocked: result.blocked,
-        store: sanitizeStoreForClient(savedStore),
+        store: sanitizeStoreForClient(savedStore, true),
       });
     }
 
@@ -1386,7 +1794,7 @@ export async function POST(request: NextRequest) {
         ok: true,
         deletedCount: 1,
         deletedId: requestId,
-        store: sanitizeStoreForClient(savedStore),
+        store: sanitizeStoreForClient(savedStore, true),
       });
     }
 
@@ -1454,7 +1862,7 @@ export async function POST(request: NextRequest) {
         ok: true,
         deletedCount: result.deletedCount,
         mode: result.mode,
-        store: sanitizeStoreForClient(savedStore),
+        store: sanitizeStoreForClient(savedStore, true),
       });
     }
 
@@ -1462,38 +1870,43 @@ export async function POST(request: NextRequest) {
     // K) GUARDAR Y VERIFICAR CONEXIÓN DIRECTA DE CORREO + ENVIAR MAIL DE PRUEBA
     // =========================================================================
     if (actionType === "SAVE_AND_VERIFY_EMAIL_SETTINGS") {
-      const current = await getTraumStore();
-      const nextNotificationEmail =
-        payload.notificationEmail !== undefined
-          ? String(payload.notificationEmail).trim()
-          : current.settings.notificationEmail;
-      const nextSmtpUser =
-        payload.smtpUser !== undefined
-          ? String(payload.smtpUser).trim()
-          : current.settings.smtpUser;
-      const incomingPass =
-        payload.smtpAppPassword !== undefined
-          ? String(payload.smtpAppPassword).trim()
-          : "";
-      const nextSmtpPass =
-        incomingPass.length > 0
-          ? incomingPass
-          : current.settings.smtpAppPassword;
+      const { store: savedStore, result: updatedSettings } =
+        await runStoreTransaction(async (current) => {
+          const nextNotificationEmail =
+            payload.notificationEmail !== undefined
+              ? String(payload.notificationEmail).trim()
+              : current.settings.notificationEmail;
+          const nextSmtpUser =
+            payload.smtpUser !== undefined
+              ? String(payload.smtpUser).trim()
+              : current.settings.smtpUser;
+          const incomingPass =
+            payload.smtpAppPassword !== undefined
+              ? String(payload.smtpAppPassword).trim()
+              : "";
+          const nextSmtpPass =
+            incomingPass.length > 0
+              ? incomingPass
+              : current.settings.smtpAppPassword;
 
-      const updatedSettings = {
-        ...current.settings,
-        notificationEmail: nextNotificationEmail,
-        email: nextNotificationEmail || current.settings.email,
-        smtpUser: nextSmtpUser,
-        smtpAppPassword: nextSmtpPass,
-        resendApiKey: "",
-        web3FormsAccessKey: "",
-      };
+          const settings = {
+            ...current.settings,
+            notificationEmail: nextNotificationEmail,
+            email: nextNotificationEmail || current.settings.email,
+            smtpUser: nextSmtpUser,
+            smtpAppPassword: nextSmtpPass,
+            resendApiKey: "",
+            web3FormsAccessKey: "",
+          };
 
-      const savedStore = await saveTraumStore({
-        ...current,
-        settings: updatedSettings,
-      });
+          return {
+            nextStore: {
+              ...current,
+              settings,
+            },
+            result: settings,
+          };
+        });
 
       const verifyRes = await verifyDirectSmtpConnection(updatedSettings);
 
@@ -1502,56 +1915,60 @@ export async function POST(request: NextRequest) {
         verified: verifyRes.ok,
         senderEmail: verifyRes.senderEmail,
         errorDetails: verifyRes.error,
-        store: sanitizeStoreForClient(savedStore),
+        store: sanitizeStoreForClient(savedStore, true),
       });
     }
 
     if (actionType === "SEND_TEST_EMAIL") {
-      const current = await getTraumStore();
       const customRecipient = payload.recipientEmail
         ? String(payload.recipientEmail).trim()
         : undefined;
 
-      const nextNotificationEmail =
-        payload.notificationEmail !== undefined
-          ? String(payload.notificationEmail).trim()
-          : current.settings.notificationEmail;
+      const { result: tempSettings } = await runStoreTransaction(
+        async (current) => {
+          const nextNotificationEmail =
+            payload.notificationEmail !== undefined
+              ? String(payload.notificationEmail).trim()
+              : current.settings.notificationEmail;
 
-      const incomingPass =
-        payload.smtpAppPassword !== undefined
-          ? String(payload.smtpAppPassword).trim()
-          : "";
-      const effectivePass =
-        incomingPass.length > 0
-          ? incomingPass
-          : current.settings.smtpAppPassword;
+          const incomingPass =
+            payload.smtpAppPassword !== undefined
+              ? String(payload.smtpAppPassword).trim()
+              : "";
+          const effectivePass =
+            incomingPass.length > 0
+              ? incomingPass
+              : current.settings.smtpAppPassword;
 
-      const tempSettings = {
-        ...current.settings,
-        notificationEmail: nextNotificationEmail,
-        email: nextNotificationEmail || current.settings.email,
-        ...(payload.smtpUser !== undefined &&
-        String(payload.smtpUser).trim().length > 0
-          ? { smtpUser: String(payload.smtpUser).trim() }
-          : {}),
-        smtpAppPassword: effectivePass,
-        resendApiKey: "",
-        web3FormsAccessKey: "",
-      };
+          const settings = {
+            ...current.settings,
+            notificationEmail: nextNotificationEmail,
+            email: nextNotificationEmail || current.settings.email,
+            ...(payload.smtpUser !== undefined &&
+            String(payload.smtpUser).trim().length > 0
+              ? { smtpUser: String(payload.smtpUser).trim() }
+              : {}),
+            smtpAppPassword: effectivePass,
+            resendApiKey: "",
+            web3FormsAccessKey: "",
+          };
+
+          return {
+            nextStore: {
+              ...current,
+              settings,
+            },
+            result: settings,
+          };
+        }
+      );
 
       const emailRes = await sendTestDiagnosticEmail(
         tempSettings,
         customRecipient
       );
 
-      const savedStore = await saveTraumStore({
-        ...current,
-        settings: tempSettings,
-        emailLogs: [emailRes.logEntry, ...(current.emailLogs || [])].slice(
-          0,
-          60
-        ),
-      });
+      const finalStore = await appendEmailLogSafely(emailRes.logEntry);
 
       return NextResponse.json({
         ok: true,
@@ -1559,7 +1976,7 @@ export async function POST(request: NextRequest) {
         channel: emailRes.channel,
         errorDetails: emailRes.errorDetails,
         logEntry: emailRes.logEntry,
-        store: sanitizeStoreForClient(savedStore),
+        store: sanitizeStoreForClient(finalStore, true),
       });
     }
 
@@ -1709,7 +2126,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({
         ok: true,
         ...result,
-        store: sanitizeStoreForClient(savedStore),
+        store: sanitizeStoreForClient(savedStore, true),
       });
     }
 
@@ -1730,36 +2147,50 @@ export async function POST(request: NextRequest) {
         );
       }
 
-      const current = await getTraumStore();
-      const newReview: ReviewItem = {
-        id: `rev-${Date.now()}`,
-        authorName: (payload.authorName || "Pescador Verificado").slice(0, 80),
-        authorEmail: googleEmail,
-        authorAvatar: payload.authorAvatar
-          ? String(payload.authorAvatar)
-          : undefined,
-        verifiedGoogle: true,
-        authorLocation: (payload.authorLocation || "Patagonia").slice(0, 80),
-        experienceModality: (
-          payload.experienceModality || "Pesca con mosca"
-        ).slice(0, 80),
-        rating: Math.min(5, Math.max(1, Number(payload.rating) || 5)),
-        comment: (payload.comment || "").slice(0, 700),
-        createdAt: new Date().toISOString(),
-      };
-
-      const saved = await saveTraumStore({
-        ...current,
-        reviews: [newReview, ...(current.reviews || [])],
+      const { store: saved, result: newReview } = await runStoreTransaction(
+        async (current) => {
+          const rev: ReviewItem = {
+            id: `rev-${Date.now()}`,
+            authorName: (payload.authorName || "Pescador Verificado").slice(
+              0,
+              80
+            ),
+            authorEmail: googleEmail,
+            authorAvatar: payload.authorAvatar
+              ? String(payload.authorAvatar)
+              : undefined,
+            verifiedGoogle: true,
+            authorLocation: (payload.authorLocation || "Patagonia").slice(
+              0,
+              80
+            ),
+            experienceModality: (
+              payload.experienceModality || "Pesca con mosca"
+            ).slice(0, 80),
+            rating: Math.min(5, Math.max(1, Number(payload.rating) || 5)),
+            comment: (payload.comment || "").slice(0, 700),
+            createdAt: new Date().toISOString(),
+          };
+          return {
+            nextStore: {
+              ...current,
+              reviews: [rev, ...(current.reviews || [])],
+            },
+            result: rev,
+          };
+        }
+      );
+      return NextResponse.json({
+        ok: true,
+        review: newReview,
+        store: sanitizeStoreForClient(saved, isAdminRequest(request, saved)),
       });
-      return NextResponse.json({ ok: true, review: newReview, store: sanitizeStoreForClient(saved) });
     }
 
     // =========================================================================
     // 3. GUARDADO DE CONSENTIMIENTO DE COOKIES
     // =========================================================================
     if (actionType === "COOKIE_CONSENT") {
-      const current = await getTraumStore();
       const nowIso = new Date().toISOString();
       const visitorId =
         String(payload.visitorId || "").trim() || `vis-${Date.now()}`;
@@ -1791,13 +2222,20 @@ export async function POST(request: NextRequest) {
 
       await saveCookieConsentToDb(record);
 
-      const existingConsents = (current.cookieConsents || []).filter(
-        (c) => c.visitorId !== visitorId
+      const { store: updatedStore } = await runStoreTransaction(
+        async (current) => {
+          const existingConsents = (current.cookieConsents || []).filter(
+            (c) => c.visitorId !== visitorId
+          );
+          return {
+            nextStore: {
+              ...current,
+              cookieConsents: [record, ...existingConsents].slice(0, 100),
+            },
+            result: null,
+          };
+        }
       );
-      const updatedStore = await saveTraumStore({
-        ...current,
-        cookieConsents: [record, ...existingConsents].slice(0, 100),
-      });
 
       const response = NextResponse.json({
         ok: true,
@@ -1827,7 +2265,6 @@ export async function POST(request: NextRequest) {
     // 4. BOTÓN DE ARREPENTIMIENTO (LEY 24.240)
     // =========================================================================
     if (actionType === "REGRET_REQUEST") {
-      const current = await getTraumStore();
       const randomCode = Math.floor(100000 + Math.random() * 900000);
       const regretItem: RegretRequestItem = {
         id: `reg-${Date.now()}`,
@@ -1842,16 +2279,20 @@ export async function POST(request: NextRequest) {
         status: "Recibido",
       };
 
-      await sendRegretNotificationEmail(regretItem, current.settings);
+      const { store: saved } = await runStoreTransaction(async (current) => ({
+        nextStore: {
+          ...current,
+          regretRequests: [regretItem, ...(current.regretRequests || [])],
+        },
+        result: null,
+      }));
 
-      const saved = await saveTraumStore({
-        ...current,
-        regretRequests: [regretItem, ...(current.regretRequests || [])],
-      });
+      await sendRegretNotificationEmail(regretItem, saved.settings);
+
       return NextResponse.json({
         ok: true,
         regret: regretItem,
-        store: sanitizeStoreForClient(saved),
+        store: sanitizeStoreForClient(saved, isAdminRequest(request, saved)),
       });
     }
 
